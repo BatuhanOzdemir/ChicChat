@@ -65,7 +65,10 @@ schema_paths = []
 
 [db.seed]
 # If enabled, seeds the database after migrations during a db reset.
-enabled = true
+# Disabled on purpose: ChicChat seeds via an idempotent Node script
+# (`npm run db:seed`, built in Step 2), not Supabase's reset-time seeding.
+# This keeps `db reset` / `db:migrate` pure (migrations only).
+enabled = false
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
 sql_paths = ["./seed.sql"]
