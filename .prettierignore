@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+build
+coverage
+package-lock.json
+public
+supabase/.branches
+supabase/.temp
+
+# Author-owned docs — do not reformat prose/spec.
+CLAUDE.md
+README.md
+docs
