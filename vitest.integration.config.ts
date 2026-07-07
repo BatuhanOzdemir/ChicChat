@@ -10,5 +10,8 @@ export default defineConfig({
     include: ["src/**/*.integration.test.ts"],
     testTimeout: 30_000,
     hookTimeout: 30_000,
+    // These tests share one local DB (some run the seed) — run files serially
+    // so they don't race on the same rows.
+    fileParallelism: false,
   },
 });
