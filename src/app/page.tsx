@@ -7,9 +7,15 @@ export default function Home() {
           WhatsApp-native structured intake &amp; triage for fashion retailers.
         </p>
         <p className="text-sm text-zinc-500">
-          Scaffold ready (Step 0). See <code>CLAUDE.md</code> for the build
+          Phase A core is in place. See <code>CLAUDE.md</code> for the build
           plan.
         </p>
+        <a
+          href="/config"
+          className="mx-auto mt-2 rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          Merchant configuration →
+        </a>
       </main>
     </div>
   );
