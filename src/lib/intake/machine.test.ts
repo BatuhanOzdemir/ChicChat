@@ -1,0 +1,74 @@
+import { describe, expect, it } from "vitest";
+import { advance, startIntake } from "./machine";
+import { demoIntakeConfig as config } from "./fixtures";
+import type { IntakeSession } from "./types";
+
+describe("intake machine — selection", () => {
+  it("re-prompts on an unrecognized category selection", () => {
+    const start = startIntake(config);
+    expect(start.prompt.kind).toBe("select_category");
+
+    const next = advance(config, start.state, "pizza please");
+    expect(next.prompt).toMatchObject({ kind: "select_category", retry: true });
+  });
+
+  it("walks category -> subcategory -> first required field", () => {
+    let s: IntakeSession = startIntake(config);
+    s = advance(config, s.state, "return");
+    expect(s.prompt).toMatchObject({
+      kind: "select_subcategory",
+      category: "return",
+    });
+    s = advance(config, s.state, "doesnt_fit");
+    expect(s.prompt).toMatchObject({
+      kind: "request_field",
+      field: { key: "order_number" },
+      retry: false,
+    });
+  });
+});
+
+describe("intake machine — invalid field input is re-asked", () => {
+  function toOrderNumberPrompt(): IntakeSession {
+    let s: IntakeSession = startIntake(config);
+    s = advance(config, s.state, "return");
+    s = advance(config, s.state, "doesnt_fit");
+    return s; // waiting on order_number
+  }
+
+  it("re-asks the same field when the order number is invalid, then advances", () => {
+    let s = toOrderNumberPrompt();
+    s = advance(config, s.state, "##"); // normalizes to "" -> invalid
+    expect(s.prompt).toMatchObject({
+      kind: "request_field",
+      field: { key: "order_number" },
+      retry: true,
+    });
+    s = advance(config, s.state, "TR100"); // valid (>=4 alnum)
+    expect(s.prompt).toMatchObject({
+      kind: "request_field",
+      field: { key: "item_ref" },
+    });
+  });
+
+  it("re-asks an enum field on a value outside the allowed set", () => {
+    let s = toOrderNumberPrompt();
+    s = advance(config, s.state, "TR100"); // order_number
+    s = advance(config, s.state, "blue shirt"); // item_ref
+    s = advance(config, s.state, "changed my mind"); // reason (free-text enum)
+    expect(s.prompt).toMatchObject({
+      kind: "request_field",
+      field: { key: "condition" },
+    });
+
+    s = advance(config, s.state, "blue"); // not an allowed condition
+    expect(s.prompt).toMatchObject({
+      kind: "request_field",
+      field: { key: "condition" },
+      retry: true,
+    });
+
+    s = advance(config, s.state, "Worn_Tags_Removed"); // canonicalized
+    expect(s.prompt.kind).toBe("complete");
+  });
+});
