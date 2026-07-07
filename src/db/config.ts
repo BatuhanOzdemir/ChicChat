@@ -17,6 +17,8 @@ export interface EditableField {
   key: string;
   type: string;
   required: boolean;
+  enumValues: string[] | null;
+  normalizeRule: string | null;
 }
 
 export interface EditableCategory {
@@ -97,9 +99,27 @@ export async function loadMerchantConfig(
       [c.id],
     );
     const { rows: fieldRows } = await db.query(
-      `select id, key, type, required from field_defs where category_id = $1 order by key`,
+      `select id, key, type, required, enum_values, normalize_rule
+         from field_defs where category_id = $1 order by key`,
       [c.id],
     );
+    const fields: EditableField[] = (
+      fieldRows as {
+        id: string;
+        key: string;
+        type: string;
+        required: boolean;
+        enum_values: string[] | null;
+        normalize_rule: string | null;
+      }[]
+    ).map((f) => ({
+      id: f.id,
+      key: f.key,
+      type: f.type,
+      required: f.required,
+      enumValues: f.enum_values ?? null,
+      normalizeRule: f.normalize_rule ?? null,
+    }));
     categories.push({
       id: c.id,
       key: c.key,
@@ -107,7 +127,7 @@ export async function loadMerchantConfig(
       enabled: c.enabled,
       sortOrder: c.sort_order,
       subcategories: subRows as { key: string; label: string }[],
-      fields: fieldRows as EditableField[],
+      fields,
     });
   }
 
@@ -134,6 +154,8 @@ export async function buildIntakeConfig(
           key: f.key,
           type: f.type as FieldType,
           required: f.required,
+          enumValues: f.enumValues,
+          normalizeRule: f.normalizeRule,
         })),
       })),
   };

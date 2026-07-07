@@ -1,0 +1,106 @@
+/**
+ * Turn an intake `Prompt` (Step 5) into a WhatsApp outbound message (SPEC §6).
+ * Category/subcategory prompts become static interactive **List Messages** (the
+ * "Listeyi Gör" pattern); field prompts become text; completion becomes a
+ * summary. Respects WhatsApp's field-length caps.
+ */
+import type { Prompt } from "../intake";
+import type { ListRow, OutboundMessage } from "./types";
+
+// WhatsApp caps: row title <= 24, description <= 72, button <= 20, header <= 60.
+const TITLE_MAX = 24;
+const DESC_MAX = 72;
+const BUTTON = "View options";
+
+function truncate(value: string, max: number): string {
+  return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+}
+
+function humanize(key: string): string {
+  return key.replace(/_/g, " ");
+}
+
+function toRows(options: { key: string; label: string }[]): ListRow[] {
+  // Cap at 10 rows (WhatsApp limit); the taxonomy fits comfortably.
+  return options.slice(0, 10).map((o) => {
+    const row: ListRow = { id: o.key, title: truncate(o.label, TITLE_MAX) };
+    if (o.label.length > TITLE_MAX)
+      row.description = truncate(o.label, DESC_MAX);
+    return row;
+  });
+}
+
+function list(
+  to: string,
+  header: string,
+  body: string,
+  sectionTitle: string,
+  options: { key: string; label: string }[],
+): OutboundMessage {
+  return {
+    to,
+    type: "interactive",
+    interactive: {
+      type: "list",
+      header: { type: "text", text: truncate(header, 60) },
+      body: { text: body },
+      action: {
+        button: BUTTON,
+        sections: [
+          { title: truncate(sectionTitle, TITLE_MAX), rows: toRows(options) },
+        ],
+      },
+    },
+  };
+}
+
+function text(to: string, body: string): OutboundMessage {
+  return { to, type: "text", text: { body } };
+}
+
+export function promptToMessage(prompt: Prompt, to: string): OutboundMessage {
+  switch (prompt.kind) {
+    case "select_category":
+      return list(
+        to,
+        "How can we help?",
+        prompt.retry
+          ? "Sorry, I didn't catch that. Please pick a topic:"
+          : "Please pick a topic:",
+        "Topics",
+        prompt.options,
+      );
+
+    case "select_subcategory":
+      return list(
+        to,
+        "A bit more detail",
+        prompt.retry
+          ? "Sorry, I didn't catch that. Please choose one:"
+          : "Which best describes it?",
+        "Options",
+        prompt.options,
+      );
+
+    case "request_field": {
+      const prefix = prompt.retry ? "Sorry, that didn't look right. " : "";
+      const body =
+        prompt.field.type === "media"
+          ? `${prefix}Please send a photo of the item.`
+          : `${prefix}Please share your ${humanize(prompt.field.key)}.`;
+      return text(to, body);
+    }
+
+    case "complete": {
+      const c = prompt.case;
+      const lines = [
+        "✅ Thanks! We've logged your request:",
+        `• Category: ${c.category}${c.subcategory ? ` / ${c.subcategory}` : ""}`,
+        ...c.fields.map((f) => `• ${humanize(f.key)}: ${f.normalized ?? "—"}`),
+        "",
+        "An agent will follow up shortly.",
+      ];
+      return text(to, lines.join("\n"));
+    }
+  }
+}
