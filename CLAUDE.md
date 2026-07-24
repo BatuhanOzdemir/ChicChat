@@ -1,160 +1,128 @@
-# CLAUDE.md — Build Plan & Working Agreement
+# CLAUDE.md — Working Agreement & v0.2 Build Plan
 
-This file is the **execution plan**. The full product spec lives in `docs/SPEC.md`
-(the "Fashion Returns & CS — Structured Intake Starter Pack" v1.1). `docs/SPEC.md`
-is the **source of truth** for *what* to build; this file governs *how* we build it.
-
-If anything here conflicts with `docs/SPEC.md`, the spec wins on product behavior —
-ask before diverging.
+`docs/SPEC.md` = WHAT to build (source of truth for product behaviour).
+`docs/ENGINEERING-HANDBOOK.md` = lasting engineering standards.
+This file = HOW we work + the CURRENT build plan. Conflicts: SPEC wins on
+product behaviour; the Handbook wins on engineering standards.
 
 ---
 
-## What we're building
+## How we work (unchanged, and non-negotiable)
 
-A WhatsApp-native structured-intake and triage layer for apparel merchants. Phase 1
-turns a messy customer message into a clean, structured case for a human agent.
-Phase 2 (later) resolves cases autonomously. See `docs/SPEC.md` for the taxonomy,
-data model, rules, connectors, and the WhatsApp Flow item-picker.
+1. Implement exactly ONE numbered step, then STOP.
+2. Every step has a verification gate; run it and show the output.
+3. Post the step report (template below) and WAIT for my sign-off ("approved" /
+   "next") before starting the next step. Fixes happen within the current step.
+4. Commit after each approved step (conventional commits).
+5. No skipping ahead, no early scaffolding of future steps.
+6. Ambiguity → ask me one focused question, don't guess.
+6b. The simulator is the standing test bench: from Step 1 onward, every step
+   with user-visible behaviour must be demonstrable in the simulator, and each
+   step extends the simulator with whatever controls its features need
+   (SPEC §7). "Works but can't be shown in the simulator" fails the gate.
+7. Definition of Done per step: gate ✓ · lint ✓ · typecheck ✓ · tests ✓ ·
+   Handbook standards respected · committed · report posted · sign-off received.
 
----
-
-## How we work (read this first — it is the most important section)
-
-1. **One step at a time.** Implement exactly ONE numbered step from the build plan
-   below, then STOP.
-2. **Every step has a verification gate.** A step is not done until its gate passes
-   (tests green / the stated check succeeds). Run the gate and show me the output.
-3. **Stop and wait for my sign-off.** After a step's gate passes, post the step
-   report (template below) and wait. Do **not** start the next step until I reply
-   "approved" / "next". If I ask for changes, fix within the current step.
-4. **Commit after each approved step** using a conventional-commit message, e.g.
-   `feat(step-3): order-number normalization layer + tests`.
-5. **Do not skip ahead or scaffold future steps early.** No stubs for later steps
-   unless a step explicitly calls for them.
-6. **Ask when ambiguous.** If the spec is unclear or a decision has trade-offs,
-   ask me a single focused question instead of guessing.
-7. **No external credentials until Phase B.** Phase A (Steps 0–7) must build and
-   pass entirely locally with no Meta/İkas/Shopify accounts. Do not add code that
-   requires real API keys before Phase B, and never hardcode secrets — use
-   `.env.local` and commit a `.env.example`.
-
-### Step report template (post this after each step)
+### Step report template
 ```
 ## Step N — <title>  ✅ gate passed
 - What I built: <1–3 lines>
 - Files added/changed: <list>
-- Verification: <command run> → <result / test summary>
-- Notes / decisions: <anything you chose; flag assumptions>
-Awaiting your sign-off to proceed to Step N+1.
+- Verification: <command> → <result>
+- Notes / decisions / assumptions: <flag anything I chose>
+Awaiting sign-off for Step N+1.
 ```
 
 ---
 
-## Tech stack & conventions
+## v0.2 build plan
 
-- **Framework:** Next.js (App Router) + TypeScript (`strict: true`).
-- **Styling:** Tailwind CSS.
-- **DB:** Supabase (Postgres). Use SQL migrations checked into `supabase/migrations`.
-- **Tests:** Vitest for unit/integration; Playwright for any UI e2e (optional early).
-- **Lint/format:** ESLint + Prettier.
-- **Structure:** keep the engine modules (normalization, rules, intake state
-  machine) as **pure, framework-free TypeScript** under `src/lib/` so they are
-  unit-testable without Next.js or the DB. UI and DB are thin layers on top.
-- **Tests live next to code** (`*.test.ts`). Prefer small modules and pure functions.
-- Conventional commits. Small, reviewable diffs.
+### Step 0 — Docs restructure & retrofit audit
+- **Build:** move new SPEC.md and ENGINEERING-HANDBOOK.md into `docs/`; replace
+  old CLAUDE.md with this file; delete superseded addition files. Add
+  `npm run typecheck` (`tsc --noEmit`). Audit existing code against the
+  Handbook; produce `docs/RETROFIT.md` listing every violation (no fixes yet).
+- **Gate:** three docs in place; typecheck script runs; RETROFIT.md lists
+  findings with file references.
 
-### Commands (you will create these in Step 0; keep them working)
-- `npm run dev` — start Next.js
-- `npm run test` / `npm run test:watch` — Vitest
-- `npm run lint` — ESLint
-- `npm run db:migrate` — apply migrations to local Supabase
-- `npm run db:seed` — load demo data (idempotent)
+### Step 1 — Chat simulator (SPEC §7)
+- **Build:** `/simulator` route (dev-only or auth-gated): WhatsApp-like chat UI;
+  merchant + fake-phone selector; injects synthetic messages into the real
+  handler (signature bypass only); supports text, list taps, fake photo, fake
+  Flow payloads; side panel with live session state and final case JSON; reset;
+  preset scenarios; error injection and session time-travel hooks (SPEC §7) —
+  this is the permanent test bench all later gates run on.
+- **Gate:** intakes for at least three different categories completed entirely
+  in the simulator, including the messy-order-number preset; case JSON visible
+  and correct each time; no Meta credentials configured anywhere.
 
----
+### Step 2 — Hardening & unexpected-error handling (SPEC §§10–13)
+- **Build:** idempotency by message ID; transactional persistCase; session
+  inactivity handling per SPEC §11 — nudge at `nudge_after_minutes` (default 5),
+  abandon at `abandon_after_hours` (default 24), both merchant-configurable,
+  progress never discarded early; cleanup job; boundary validation; structured
+  JSON logging; top-level handler catch → generic customer message, `errored`
+  session state, correlated log (SPEC §13 last row).
+- **Gate:** tests prove: duplicate replay = single effect; kill-mid-persist
+  leaves no partial case; simulator time-travel shows the nudge at 5 min, a
+  post-nudge reply resuming with all fields intact, and abandonment at the
+  configured horizon; a thrown error inside the machine produces the generic
+  reply + errored session + one structured log line.
 
-## Build plan
+### Step 3 — Merchant taxonomy editor, full CRUD (SPEC §8)
+- **Build:** upgrade config UI from toggles to full CRUD: categories,
+  subcategories, fields (incl. required + enum values), routing rules; policy
+  settings incl. KVKK URL + retention. Defaults pre-loaded per merchant.
+- **Gate:** in the simulator, create a brand-new custom category with a custom
+  enum field via the UI and complete an intake using it end-to-end; disable a
+  default category and verify it disappears from the menu.
 
-### Phase A — Local core (no external accounts)
+### Step 4 — Case persistence upgrade & merchant case views (SPEC §8)
+- **Build:** case list (filters: status/category/date/order number), case detail
+  (raw+normalized fields, items, photos, timeline, abandoned + errored states),
+  basic analytics counters (by category/status/day, median intake time,
+  abandonment rate).
+- **Gate:** cases generated via simulator appear correctly in list, filters,
+  detail, and counters; an abandoned and an errored session both surface.
 
-#### Step 0 — Scaffold & tooling
-- **Build:** Next.js + TS + Tailwind app; local Supabase; Vitest; ESLint/Prettier;
-  the npm scripts above; `.env.example`; `docs/SPEC.md` present.
-- **Gate:** `npm run dev` boots with no errors; `npm run test` runs (a trivial
-  passing test is fine); `npm run lint` passes.
+### Step 5 — Agent case console (SPEC §9, minimal)
+- **Build:** queue view (priority/age, queue/category filters); case detail with
+  handoff package + read-only transcript; status transitions; internal notes.
+- **Gate:** simulator-generated case flows open → in_progress → resolved with a
+  note; routing rules land cases in the right queues.
 
-#### Step 1 — Database schema & migrations
-- **Build:** Migrations for every table in `docs/SPEC.md` §4 (merchants,
-  merchant_config, categories, subcategories, field_defs, routing_rules,
-  integrations, cases, case_fields, case_items).
-- **Gate:** `npm run db:migrate` applies cleanly to a fresh local DB; a schema test
-  asserts all tables/columns exist.
+### Step 6 — Multi-tenancy seam
+- **Build:** merchant resolution by phone_number_id (replace demo hardcode);
+  merchant-scoped everything; simulator gains merchant switching.
+- **Gate:** two merchants with different taxonomies; interleaved simulator
+  conversations produce correctly scoped sessions/cases; cross-tenant leakage
+  test passes.
 
-#### Step 2 — Seed the opinionated default
-- **Build:** Idempotent seed: one demo merchant + merchant_config; the 8 categories
-  from §1 with their subcategories, field_defs (required flags), and the default
-  routing_rules; one demo order with 2–3 line items.
-- **Gate:** `npm run db:seed` runs twice without duplicating rows; a query returns
-  the full taxonomy and the demo order's line items.
+### Step 7 — Deployment
+- **Build:** deploy to Vercel (or equivalent) + hosted Supabase; env-var
+  secrets; migrations against hosted DB; simulator auth-gated in prod.
+- **Gate:** deployed simulator completes a full intake against the hosted DB;
+  tests green against hosted config.
 
-#### Step 3 — Normalization layer (`src/lib/normalize`)
-- **Build:** Pure module implementing §2 normalization, especially `order_number`
-  (strip `/`, spaces, `#`, leading zeros; uppercase; validate against a configurable
-  regex) and enum constraining.
-- **Gate:** Unit tests cover the messy cases — `"  12/3 4-5 "`, `"#00420"`, invalid
-  ids — and pass.
+### Step 8 — Meta re-wiring (staging)
+- **Build:** point Meta test-number webhook at the deployed URL; KVKK line on
+  first message; verify signature path in production mode.
+- **Gate:** real WhatsApp message to the test number round-trips through the
+  deployed app; duplicate-delivery replay test passes in deployed environment.
 
-#### Step 4 — Rule engine (`src/lib/rules`)
-- **Build:** Pure `evaluate(conditionJson, context) → action` per §3.
-- **Gate:** Unit tests for the spec's example rules pass: refund received + past SLA
-  → finance queue; subcategory "not as described"/"damaged" → require photo;
-  within-window check.
+### Step 9 — İkas connector (SPEC §14)
+- **Build:** private-app credential entry in merchant console; client_credentials
+  token fetch + 4h refresh (cached per merchant); getOrder via GraphQL against a
+  free İkas dev store; tier flip to 1; Tier-0 degradation on unavailability.
+- **Gate:** token expiry simulation passes; dev-store order returns line items;
+  integration-down simulation degrades per SPEC §13.
 
-#### Step 5 — Intake state machine (`src/lib/intake`)
-- **Build:** Taxonomy-driven machine: category → subcategory → required fields →
-  case assembly, Tier-0 mode (no integration; item_ref captured as text per §6.4).
-  Include a **local message simulator** so it can be driven without WhatsApp.
-- **Gate:** Tests feed several messy sample inputs and assert a correct, complete
-  structured case is produced, asking only for missing fields.
+### Step 10 — Item-picker Flow (SPEC §6)
+- **Build:** data-exchange endpoint (RSA-2048), order caching at ORDER_NUMBER,
+  SELECT_ITEMS from live İkas dev-store order, selections → case_items. Simulator
+  fake-Flow payloads already cover the logic; this step is the real Meta wiring.
+- **Gate:** in WhatsApp (test number), a customer picks real items from a real
+  dev-store order; case records correct line-item ids.
 
-#### Step 6 — Case persistence & handoff package
-- **Build:** Persist cases/case_fields/case_items; produce the clean "agent handoff"
-  JSON (category, subcategory, normalized fields, selected items, photo refs).
-- **Gate:** An integration test runs a full Tier-0 intake via the simulator, writes
-  the case, reads it back, and asserts the handoff JSON matches.
-
-#### Step 7 — Merchant config UI
-- **Build:** UI to toggle categories, edit labels/required fields, and set
-  return_window_days / refund_sla_days. Respect locale/RTL flag.
-- **Gate:** Changes persist and visibly change what the intake simulator asks for;
-  basic component/e2e test or a clear manual walkthrough.
-
-**→ Phase A complete. Stop. Do not begin Phase B until I confirm and provide
-credentials.**
-
-### Phase B — Integrations (needs external accounts; gated)
-
-#### Step 8 — WhatsApp Business API wiring
-- **Build:** Webhook receive; send static **List Messages** for category/subcategory
-  (the "Listeyi Gör" pattern); map real inbound messages into the Step 5 machine.
-- **Gate:** A real message in the Meta WABA sandbox drives a category selection and
-  produces a Tier-0 case.
-
-#### Step 9 — First connector (İkas or Shopify)
-- **Build:** OAuth "connect store" in the merchant UI; read an order + its line items
-  by order_number. Per §5, own-store platform, self-serve connect.
-- **Gate:** Connect flow completes; `getOrder(order_number)` returns real line items;
-  `integration_tier` for the merchant flips to 1.
-
-#### Step 10 — Dynamic item-picker Flow (§6)
-- **Build:** Data-exchange endpoint (RSA-2048 encryption, hosted by us); cache the
-  order at the `ORDER_NUMBER` screen; `SELECT_ITEMS` CheckboxGroup populated from the
-  live order; selected ids → `case_items`.
-- **Gate:** In WhatsApp, the customer picks real items from a real order and the case
-  records the correct line-item ids.
-
----
-
-## Definition of done (per step)
-Gate passes • tests green • lint clean • committed • step report posted • my sign-off
-received. Only then move on.
-EOF
+**→ v0.2 complete. v0.3 (LLM classify/extract) begins only after sign-off and a
+demo session with at least one real merchant.**
