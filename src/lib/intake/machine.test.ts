@@ -72,19 +72,25 @@ describe("intake machine — invalid field input is re-asked", () => {
     });
   });
 
-  it("re-asks an enum field on a value outside the allowed set", () => {
+  it("offers an enum field as options and re-asks on a value outside the set", () => {
     let s = toOrderNumberPrompt();
     s = advance(config, s.state, "TR100"); // order_number
     s = advance(config, s.state, "blue shirt"); // item_ref
     s = advance(config, s.state, "changed my mind"); // reason (free-text enum)
+
+    // `condition` has configured values, so it is offered as a list (SPEC §5).
     expect(s.prompt).toMatchObject({
-      kind: "request_field",
+      kind: "select_field",
       field: { key: "condition" },
+      options: [
+        { key: "unworn_tags_on", label: "Unworn tags on" },
+        { key: "worn_tags_removed", label: "Worn tags removed" },
+      ],
     });
 
     s = advance(config, s.state, "blue"); // not an allowed condition
     expect(s.prompt).toMatchObject({
-      kind: "request_field",
+      kind: "select_field",
       field: { key: "condition" },
       retry: true,
     });

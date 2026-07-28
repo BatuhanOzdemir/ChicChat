@@ -106,6 +106,20 @@ export function promptToMessage(prompt: Prompt, to: string): OutboundMessage {
         prompt.options,
       );
 
+    case "select_field": {
+      // Enum fields are always tappable (SPEC §5) — the customer never guesses.
+      const label = humanize(prompt.field.key);
+      return list(
+        to,
+        label,
+        prompt.retry
+          ? `Please choose one of the options for ${label}:`
+          : `Please choose your ${label}:`,
+        "Options",
+        prompt.options,
+      );
+    }
+
     case "request_field": {
       const prefix = prompt.retry ? "Sorry, that didn't look right. " : "";
       const body =

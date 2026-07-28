@@ -76,7 +76,18 @@ export type Prompt =
       options: Option[];
       retry: boolean;
     }
+  /** Free-form answer (string, media, ref, or an enum with no fixed values). */
   | { kind: "request_field"; field: FieldDef; retry: boolean }
+  /**
+   * An enum field with configured values: always offered as a tappable list,
+   * never as a free-text question (SPEC §5).
+   */
+  | {
+      kind: "select_field";
+      field: FieldDef;
+      options: Option[];
+      retry: boolean;
+    }
   | { kind: "complete"; case: IntakeCase };
 
 export interface IntakeSession {

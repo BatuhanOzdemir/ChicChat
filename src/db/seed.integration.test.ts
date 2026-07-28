@@ -14,10 +14,24 @@ const DATABASE_URL =
 const MERCHANT_ID = "00000000-0000-0000-0000-000000000001";
 const CASE_ID = "00000000-0000-0000-0000-000000000002";
 
-// Expected row counts for the demo merchant after seeding (transcribed from §1).
-// Every count is scoped to seeded rows only — `cases` counts the seeded demo
-// case by id, so real cases (from the simulator or a live conversation) do not
-// break this assertion (RETROFIT R6b).
+/**
+ * The 8 categories the seed installs (SPEC §1). Merchants can now create their
+ * own categories through the editor, so every assertion below is scoped to
+ * these keys rather than "everything this merchant has" — otherwise a
+ * merchant-created category breaks the seed's tests (same class as R6b).
+ */
+const SEEDED_CATEGORY_KEYS = [
+  "wismo",
+  "return",
+  "exchange",
+  "refund_not_received",
+  "wrong_damaged_missing",
+  "cancel_modify",
+  "sizing_fit",
+  "other",
+];
+
+// Expected row counts for the seeded rows only (transcribed from §1).
 const EXPECTED_COUNTS = {
   merchants: 1,
   merchant_config: 1,
@@ -43,17 +57,21 @@ async function countsForDemoMerchant() {
   const { rows } = await client.query<{ k: string; n: string }>(
     `select 'merchants' k, count(*) n from merchants where id = $1
      union all select 'merchant_config', count(*) from merchant_config where merchant_id = $1
-     union all select 'categories', count(*) from categories where merchant_id = $1
+     union all select 'categories', count(*) from categories
+        where merchant_id = $1 and key = any($3)
      union all select 'subcategories', count(*) from subcategories sc
-        join categories c on c.id = sc.category_id where c.merchant_id = $1
+        join categories c on c.id = sc.category_id
+        where c.merchant_id = $1 and c.key = any($3)
      union all select 'field_defs', count(*) from field_defs fd
-        join categories c on c.id = fd.category_id where c.merchant_id = $1
+        join categories c on c.id = fd.category_id
+        where c.merchant_id = $1 and c.key = any($3)
      union all select 'routing_rules', count(*) from routing_rules rr
-        join categories c on c.id = rr.category_id where c.merchant_id = $1
+        join categories c on c.id = rr.category_id
+        where c.merchant_id = $1 and c.key = any($3)
      union all select 'cases', count(*) from cases where merchant_id = $1 and id = $2
      union all select 'case_fields', count(*) from case_fields where case_id = $2
      union all select 'case_items', count(*) from case_items where case_id = $2`,
-    [MERCHANT_ID, CASE_ID],
+    [MERCHANT_ID, CASE_ID, SEEDED_CATEGORY_KEYS],
   );
   return Object.fromEntries(rows.map((r) => [r.k, Number(r.n)]));
 }
@@ -84,21 +102,14 @@ describe("seed — idempotency", () => {
 });
 
 describe("seed — taxonomy query (§1)", () => {
-  it("returns the 8 categories in sort order", async () => {
+  it("returns the 8 seeded categories in sort order", async () => {
     const { rows } = await client.query<{ key: string }>(
-      `select key from categories where merchant_id = $1 order by sort_order`,
-      [MERCHANT_ID],
+      `select key from categories
+        where merchant_id = $1 and key = any($2)
+        order by sort_order`,
+      [MERCHANT_ID, SEEDED_CATEGORY_KEYS],
     );
-    expect(rows.map((r) => r.key)).toEqual([
-      "wismo",
-      "return",
-      "exchange",
-      "refund_not_received",
-      "wrong_damaged_missing",
-      "cancel_modify",
-      "sizing_fit",
-      "other",
-    ]);
+    expect(rows.map((r) => r.key)).toEqual(SEEDED_CATEGORY_KEYS);
   });
 
   it("marks photo required on wrong/damaged/missing and new_value optional on cancel/modify", async () => {

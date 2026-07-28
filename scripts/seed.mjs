@@ -446,14 +446,28 @@ async function seed(client) {
       );
     }
 
-    for (const [key, type, required, enumValues, normalizeRule] of cat.fields) {
+    // Fields are seeded in the order the spec lists them, and that order is
+    // what the intake asks in (sort_order, not alphabetically).
+    for (let f = 0; f < cat.fields.length; f++) {
+      const [key, type, required, enumValues, normalizeRule] = cat.fields[f];
       await client.query(
-        `insert into field_defs (category_id, key, type, required, enum_values, normalize_rule)
-         values ($1, $2, $3, $4, $5, $6)
+        `insert into field_defs
+           (category_id, key, type, required, enum_values, normalize_rule, sort_order)
+         values ($1, $2, $3, $4, $5, $6, $7)
          on conflict (category_id, key) do update
            set type = excluded.type, required = excluded.required,
-               enum_values = excluded.enum_values, normalize_rule = excluded.normalize_rule`,
-        [categoryId, key, type, required, j(enumValues), normalizeRule],
+               enum_values = excluded.enum_values,
+               normalize_rule = excluded.normalize_rule,
+               sort_order = excluded.sort_order`,
+        [
+          categoryId,
+          key,
+          type,
+          required,
+          j(enumValues),
+          normalizeRule,
+          (f + 1) * 10,
+        ],
       );
     }
 

@@ -12,12 +12,12 @@ step that is scheduled to resolve it.
 | Step 0 | R1 (typecheck script) |
 | Step 1 | R5 (dead `health.ts`), R6b (seed-test isolation) |
 | Step 2 | **R3, R4, R8, R9, R11, R12, R14, R15, R16, R17, R19** — all six HIGH boundary/reliability findings plus the medium ones in scope |
+| Step 3 | **R6** (config actions now validated + covered), **R10** (config boundary), **R18** (enum fields render as tappable lists), **R21** (field ordering via `sort_order`) |
 
-Still open: R2 (`node:crypto` in `lib` — a decision, not a defect), R6 (untested
-`saveConfig`, Step 3), R7 (fixture in `lib`), R10 (declarative validation now
-covers the webhook and simulator boundaries; the config form is Step 3), R13
-(KVKK, Steps 2–4 → carried), R18 (enum prompts as tappable lists), R20 (Step 6),
-R21 (field ordering, Step 3), R22 (remaining v0.2 scope).
+Still open: R2 (`node:crypto` in `lib` — a decision, not a defect), R7 (fixture
+in `lib`), R13 (KVKK — settings and disclosure URL exist as of Step 3; retention
+enforcement and per-phone deletion remain, Step 4), R20 (multi-tenancy, Step 6),
+R22 (remaining v0.2 scope: case views, agent console, connector, Flow).
 
 Severity: **HIGH** = correctness/security risk in production · **MED** =
 standards violation with real consequences · **LOW** = hygiene.

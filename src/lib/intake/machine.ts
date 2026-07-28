@@ -20,6 +20,7 @@ import type {
   IntakeSession,
   IntakeState,
   Option,
+  Prompt,
 } from "./types";
 
 /**
@@ -33,6 +34,35 @@ function findCategory(
   key: string | undefined,
 ): CategoryDef | undefined {
   return config.categories.find((c) => c.key === key);
+}
+
+/** Turn an enum value into a readable option label ("store_credit" → "Store credit"). */
+function optionForValue(value: string): Option {
+  const words = value.replace(/[_-]+/g, " ").trim();
+  return {
+    key: value,
+    label: words.charAt(0).toUpperCase() + words.slice(1),
+  };
+}
+
+/**
+ * Ask for a field. Enum fields with configured values are always offered as a
+ * tappable list (SPEC §5) so the customer never has to guess a valid value.
+ */
+function fieldPrompt(field: FieldDef, retry: boolean): Prompt {
+  if (
+    field.type === "enum" &&
+    field.enumValues &&
+    field.enumValues.length > 0
+  ) {
+    return {
+      kind: "select_field",
+      field,
+      options: field.enumValues.map(optionForValue),
+      retry,
+    };
+  }
+  return { kind: "request_field", field, retry };
 }
 
 /** A fresh category selection, used to start and to recover. */
@@ -165,7 +195,7 @@ function collectFields(
   if (next) {
     return {
       state: { ...folded, pendingFieldKey: next.key },
-      prompt: { kind: "request_field", field: next, retry: false },
+      prompt: fieldPrompt(next, false),
     };
   }
 
@@ -281,7 +311,7 @@ function captureField(
   if (!captured.valid) {
     return {
       state: next,
-      prompt: { kind: "request_field", field, retry: true },
+      prompt: fieldPrompt(field, true),
     };
   }
   return proceed(config, next);

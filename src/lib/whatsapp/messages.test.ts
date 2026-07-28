@@ -30,6 +30,35 @@ describe("promptToMessage", () => {
     expect(long.description).toBe("Wrong / damaged / missing item");
   });
 
+  it("offers an enum field as a tappable list, never as free text (SPEC §5)", () => {
+    const prompt: Prompt = {
+      kind: "select_field",
+      retry: false,
+      field: {
+        key: "refund_method",
+        type: "enum",
+        required: true,
+        enumValues: ["original_payment", "store_credit", "bank_transfer"],
+      },
+      options: [
+        { key: "original_payment", label: "Original payment" },
+        { key: "store_credit", label: "Store credit" },
+        { key: "bank_transfer", label: "Bank transfer" },
+      ],
+    };
+    const msg = promptToMessage(prompt, TO);
+    if (msg.type !== "interactive") throw new Error("expected interactive");
+
+    const rows = msg.interactive.action.sections[0].rows;
+    // The ids are the enum values, so a tap submits a valid value directly.
+    expect(rows.map((r) => r.id)).toEqual([
+      "original_payment",
+      "store_credit",
+      "bank_transfer",
+    ]);
+    expect(msg.interactive.body.text).toContain("refund method");
+  });
+
   it("asks for a normal field as text", () => {
     const prompt: Prompt = {
       kind: "request_field",

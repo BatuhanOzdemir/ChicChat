@@ -98,7 +98,7 @@ describe("inbound WhatsApp conversation -> Tier-0 case", () => {
       subMsg.interactive.action.sections[0].rows.map((r) => r.id),
     ).toContain("damaged");
 
-    // 3. pick subcategory -> starts asking for required fields (alphabetical)
+    // 3. pick subcategory -> starts asking for required fields
     await handleInbound(
       deps,
       DEMO_MERCHANT_ID,
@@ -106,23 +106,33 @@ describe("inbound WhatsApp conversation -> Tier-0 case", () => {
     );
     expect(sent[2]).toMatchObject({ type: "text" });
 
-    // 4-7. answer each required field (messy order number; photo as an image)
-    await handleInbound(
-      deps,
-      DEMO_MERCHANT_ID,
-      inbound("text", "the seam is torn"),
-    );
-    await handleInbound(
-      deps,
-      DEMO_MERCHANT_ID,
-      inbound("text", "the red dress"),
-    );
-    await handleInbound(deps, DEMO_MERCHANT_ID, inbound("text", "#tr-100 432"));
-    await handleInbound(
-      deps,
-      DEMO_MERCHANT_ID,
-      inbound("image", "wamid.media.9", "wamid.media.9"),
-    );
+    // 4-7. Answer whichever field is asked next, so the test does not depend on
+    // the merchant's configured field order (it is editable — SPEC §8).
+    const answers: Record<
+      string,
+      { kind: InboundMessage["kind"]; value: string }
+    > = {
+      order_number: { kind: "text", value: "#tr-100 432" },
+      item_ref: { kind: "text", value: "the red dress" },
+      description: { kind: "text", value: "the seam is torn" },
+      photo: { kind: "image", value: "wamid.media.9" },
+    };
+    for (let i = 0; i < 6; i++) {
+      const pending = (await loadSession(db, DEMO_MERCHANT_ID, FROM))
+        ?.pendingFieldKey;
+      if (!pending) break;
+      const answer = answers[pending];
+      if (!answer) throw new Error(`no answer scripted for "${pending}"`);
+      await handleInbound(
+        deps,
+        DEMO_MERCHANT_ID,
+        inbound(
+          answer.kind,
+          answer.value,
+          answer.kind === "image" ? answer.value : undefined,
+        ),
+      );
+    }
 
     // Final reply is the completion summary.
     const summary = sent[sent.length - 1];

@@ -15,10 +15,12 @@ export const DEMO_MERCHANT_ID = "00000000-0000-0000-0000-000000000001";
 export interface EditableField {
   id: string;
   key: string;
+  label: string | null;
   type: string;
   required: boolean;
   enumValues: string[] | null;
   normalizeRule: string | null;
+  sortOrder: number;
 }
 
 export interface EditableCategory {
@@ -27,7 +29,7 @@ export interface EditableCategory {
   label: string;
   enabled: boolean;
   sortOrder: number;
-  subcategories: { key: string; label: string }[];
+  subcategories: { id: string; key: string; label: string }[];
   fields: EditableField[];
 }
 
@@ -40,6 +42,10 @@ export interface MerchantSettings {
   nudge_after_minutes: number;
   /** Silence before an unfinished intake is abandoned (SPEC §11). */
   abandon_after_hours: number;
+  /** KVKK aydınlatma metni URL (SPEC §§8, 12). */
+  kvkk_url: string | null;
+  /** How long case data is kept before hard deletion (SPEC §12). */
+  retention_months: number;
 }
 
 export interface EditableMerchantConfig {
@@ -78,7 +84,8 @@ export async function loadMerchantConfig(
   const { rows: merchantRows } = await db.query(
     `select m.id, m.name, m.locale, m.rtl, m.currency,
             c.return_window_days, c.refund_sla_days, c.auto_approve_threshold,
-            c.order_id_regex, c.nudge_after_minutes, c.abandon_after_hours
+            c.order_id_regex, c.nudge_after_minutes, c.abandon_after_hours,
+            c.kvkk_url, c.retention_months
        from merchants m
        left join merchant_config c on c.merchant_id = m.id
       where m.id = $1`,
@@ -92,6 +99,8 @@ export async function loadMerchantConfig(
         order_id_regex: string | null;
         nudge_after_minutes: number | null;
         abandon_after_hours: number | null;
+        kvkk_url: string | null;
+        retention_months: number | null;
       })
     | undefined;
   if (!row) return null;
@@ -110,6 +119,8 @@ export async function loadMerchantConfig(
     order_id_regex: row.order_id_regex ?? null,
     nudge_after_minutes: row.nudge_after_minutes ?? 5,
     abandon_after_hours: row.abandon_after_hours ?? 24,
+    kvkk_url: row.kvkk_url ?? null,
+    retention_months: row.retention_months ?? 12,
   };
 
   const { rows: catRows } = await db.query(
@@ -118,7 +129,7 @@ export async function loadMerchantConfig(
     [merchantId],
   );
   const { rows: subRows } = await db.query(
-    `select sc.category_id, sc.key, sc.label
+    `select sc.category_id, sc.id, sc.key, sc.label
        from subcategories sc
        join categories c on c.id = sc.category_id
       where c.merchant_id = $1
@@ -126,23 +137,27 @@ export async function loadMerchantConfig(
     [merchantId],
   );
   const { rows: fieldRows } = await db.query(
-    `select fd.category_id, fd.id, fd.key, fd.type, fd.required,
-            fd.enum_values, fd.normalize_rule
+    `select fd.category_id, fd.id, fd.key, fd.label, fd.type, fd.required,
+            fd.enum_values, fd.normalize_rule, fd.sort_order
        from field_defs fd
        join categories c on c.id = fd.category_id
       where c.merchant_id = $1
-      order by fd.key`,
+      order by fd.sort_order, fd.key`,
     [merchantId],
   );
 
-  const subsByCategory = new Map<string, { key: string; label: string }[]>();
+  const subsByCategory = new Map<
+    string,
+    { id: string; key: string; label: string }[]
+  >();
   for (const s of subRows as {
     category_id: string;
+    id: string;
     key: string;
     label: string;
   }[]) {
     const list = subsByCategory.get(s.category_id) ?? [];
-    list.push({ key: s.key, label: s.label });
+    list.push({ id: s.id, key: s.key, label: s.label });
     subsByCategory.set(s.category_id, list);
   }
 
@@ -151,19 +166,23 @@ export async function loadMerchantConfig(
     category_id: string;
     id: string;
     key: string;
+    label: string | null;
     type: string;
     required: boolean;
     enum_values: string[] | null;
     normalize_rule: string | null;
+    sort_order: number;
   }[]) {
     const list = fieldsByCategory.get(f.category_id) ?? [];
     list.push({
       id: f.id,
       key: f.key,
+      label: f.label ?? null,
       type: f.type,
       required: f.required,
       enumValues: f.enum_values ?? null,
       normalizeRule: f.normalize_rule ?? null,
+      sortOrder: f.sort_order,
     });
     fieldsByCategory.set(f.category_id, list);
   }
@@ -207,7 +226,10 @@ export async function buildIntakeConfig(
       .map((c) => ({
         key: c.key,
         label: c.label,
-        subcategories: c.subcategories,
+        subcategories: c.subcategories.map((s) => ({
+          key: s.key,
+          label: s.label,
+        })),
         fields: c.fields.map((f) => ({
           key: f.key,
           type: f.type as FieldType,
