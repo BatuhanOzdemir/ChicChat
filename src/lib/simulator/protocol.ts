@@ -29,7 +29,13 @@ export interface SimulatorMessageInput {
  */
 export type SimulatorErrorInjection = "handler_exception" | "integration_down";
 
-export type SimulatorAction = "message" | "reset" | "time_travel" | "state";
+export type SimulatorAction =
+  | "message"
+  | "reset"
+  | "time_travel"
+  | "state"
+  /** Run the inactivity maintenance job now (nudge / abandon, SPEC §11). */
+  | "maintenance";
 
 export interface SimulatorRequest {
   action: SimulatorAction;
@@ -51,6 +57,7 @@ const ACTIONS: readonly SimulatorAction[] = [
   "reset",
   "time_travel",
   "state",
+  "maintenance",
 ];
 const KINDS: readonly SimulatorInputKind[] = ["text", "list", "photo", "flow"];
 const INJECTIONS: readonly SimulatorErrorInjection[] = [

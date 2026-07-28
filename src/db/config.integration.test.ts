@@ -9,7 +9,7 @@ import {
   it,
 } from "vitest";
 import { Client } from "pg";
-import type { Queryable } from "./cases";
+import { clientDatabase } from "./database";
 import {
   DEMO_MERCHANT_ID,
   buildIntakeConfig,
@@ -29,7 +29,7 @@ const DATABASE_URL =
   "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
 const client = new Client({ connectionString: DATABASE_URL });
-const db = client as unknown as Queryable;
+const db = clientDatabase(client);
 
 /** Which fields the intake asks for a given category, given the current config. */
 async function askedFieldsFor(category: string): Promise<string[]> {

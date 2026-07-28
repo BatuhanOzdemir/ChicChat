@@ -5,5 +5,5 @@
  */
 export { verifyWebhookChallenge, verifySignature } from "./verify";
 export { parseInbound, flowReplyValue } from "./inbound";
-export { promptToMessage } from "./messages";
+export { promptToMessage, nudgeMessage, genericErrorMessage } from "./messages";
 export type { InboundMessage, OutboundMessage, ListRow } from "./types";

@@ -2,18 +2,14 @@
  * Case persistence & the agent-handoff package (CLAUDE.md Step 6).
  *
  * Thin DB layer over the §4 tables. Decoupled from any specific driver via the
- * `Queryable` structural type (the pg Client satisfies it), so the engine stays
- * testable. `persistCase` writes cases/case_fields/case_items; `buildHandoff`
- * reads them back into the clean JSON a human agent (or the Phase-2 resolver)
- * consumes: category, subcategory, normalized fields, selected items, photos.
- *
- * Call `persistCase` inside a transaction for atomicity.
+ * `Queryable`/`Database` contracts, so the engine stays testable. `persistCase`
+ * writes cases/case_fields/case_items atomically; `buildHandoff` reads them back
+ * into the clean JSON a human agent (or the Phase-2 resolver) consumes:
+ * category, subcategory, normalized fields, selected items, photos.
  */
+import type { Database, Queryable } from "./database";
 
-/** Minimal query surface — pg's Client/Pool satisfy this structurally. */
-export interface Queryable {
-  query(text: string, values?: unknown[]): Promise<{ rows: unknown[] }>;
-}
+export type { Queryable };
 
 export interface PersistCaseInput {
   merchantId: string;
@@ -62,73 +58,79 @@ async function one<R>(
   return rows[0] as R | undefined;
 }
 
+/**
+ * Persist a case with its fields and items **atomically** (Handbook §6, SPEC
+ * §11): a failure part-way through leaves no partial case behind.
+ */
 export async function persistCase(
-  db: Queryable,
+  db: Database,
   input: PersistCaseInput,
 ): Promise<string> {
-  const category = await one<{ id: string }>(
-    db,
-    `select id from categories where merchant_id = $1 and key = $2`,
-    [input.merchantId, input.categoryKey],
-  );
-  if (!category) {
-    throw new Error(
-      `unknown category "${input.categoryKey}" for merchant ${input.merchantId}`,
+  return db.transaction(async (tx) => {
+    const category = await one<{ id: string }>(
+      tx,
+      `select id from categories where merchant_id = $1 and key = $2`,
+      [input.merchantId, input.categoryKey],
     );
-  }
+    if (!category) {
+      throw new Error(
+        `unknown category "${input.categoryKey}" for merchant ${input.merchantId}`,
+      );
+    }
 
-  let subcategoryId: string | null = null;
-  if (input.subcategoryKey) {
-    const sub = await one<{ id: string }>(
-      db,
-      `select id from subcategories where category_id = $1 and key = $2`,
-      [category.id, input.subcategoryKey],
-    );
-    subcategoryId = sub?.id ?? null;
-  }
+    let subcategoryId: string | null = null;
+    if (input.subcategoryKey) {
+      const sub = await one<{ id: string }>(
+        tx,
+        `select id from subcategories where category_id = $1 and key = $2`,
+        [category.id, input.subcategoryKey],
+      );
+      subcategoryId = sub?.id ?? null;
+    }
 
-  const created = await one<{ id: string }>(
-    db,
-    `insert into cases
-       (merchant_id, customer_wa_id, category_id, subcategory_id, status, integration_tier)
-     values ($1, $2, $3, $4, $5, $6)
-     returning id`,
-    [
-      input.merchantId,
-      input.customerWaId,
-      category.id,
-      subcategoryId,
-      input.status ?? "open",
-      input.integrationTier ?? 0,
-    ],
-  );
-  const caseId = created!.id;
-
-  for (const field of input.fields) {
-    await db.query(
-      `insert into case_fields (case_id, field_key, raw_value, normalized_value)
-       values ($1, $2, $3, $4)
-       on conflict (case_id, field_key) do update
-         set raw_value = excluded.raw_value, normalized_value = excluded.normalized_value`,
-      [caseId, field.key, field.raw, field.normalized],
-    );
-  }
-
-  for (const item of input.items ?? []) {
-    await db.query(
-      `insert into case_items (case_id, line_item_id, title, variant, qty)
-       values ($1, $2, $3, $4, $5)`,
+    const created = await one<{ id: string }>(
+      tx,
+      `insert into cases
+         (merchant_id, customer_wa_id, category_id, subcategory_id, status, integration_tier)
+       values ($1, $2, $3, $4, $5, $6)
+       returning id`,
       [
-        caseId,
-        item.lineItemId,
-        item.title ?? null,
-        item.variant ?? null,
-        item.qty ?? 1,
+        input.merchantId,
+        input.customerWaId,
+        category.id,
+        subcategoryId,
+        input.status ?? "open",
+        input.integrationTier ?? 0,
       ],
     );
-  }
+    const caseId = created!.id;
 
-  return caseId;
+    for (const field of input.fields) {
+      await tx.query(
+        `insert into case_fields (case_id, field_key, raw_value, normalized_value)
+         values ($1, $2, $3, $4)
+         on conflict (case_id, field_key) do update
+           set raw_value = excluded.raw_value, normalized_value = excluded.normalized_value`,
+        [caseId, field.key, field.raw, field.normalized],
+      );
+    }
+
+    for (const item of input.items ?? []) {
+      await tx.query(
+        `insert into case_items (case_id, line_item_id, title, variant, qty)
+         values ($1, $2, $3, $4, $5)`,
+        [
+          caseId,
+          item.lineItemId,
+          item.title ?? null,
+          item.variant ?? null,
+          item.qty ?? 1,
+        ],
+      );
+    }
+
+    return caseId;
+  });
 }
 
 export async function buildHandoff(

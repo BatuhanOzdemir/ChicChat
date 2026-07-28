@@ -3,7 +3,7 @@
  * delegate to the simulator service. No Meta credentials are read here.
  */
 import { parseSimulatorRequest } from "@/lib/simulator/protocol";
-import { getPool } from "@/db/client";
+import { getDatabase } from "@/db/client";
 import { isSimulatorEnabled } from "@/server/simulator/enabled";
 import { runSimulatorAction } from "@/server/simulator/service";
 
@@ -27,7 +27,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    const result = await runSimulatorAction(getPool(), parsed.value);
+    const result = await runSimulatorAction(getDatabase(), parsed.value);
     return Response.json(result, { status: 200 });
   } catch (err) {
     // The simulator surfaces its own failures instead of hiding them.

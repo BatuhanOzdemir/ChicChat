@@ -204,6 +204,11 @@ export function SimulatorClient({
               await call({ action: "time_travel", ageMinutes: minutes });
             })
           }
+          onRunMaintenance={() =>
+            guard(async () => {
+              await call({ action: "maintenance" });
+            })
+          }
           onReset={() =>
             guard(async () => {
               setTranscript([]);

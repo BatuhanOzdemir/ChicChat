@@ -9,7 +9,8 @@ import {
   it,
 } from "vitest";
 import { Client } from "pg";
-import { buildHandoff, persistCase, type Queryable } from "./cases";
+import { buildHandoff, persistCase } from "./cases";
+import { clientDatabase } from "./database";
 import { simulateIntake } from "../lib/intake";
 import { demoIntakeConfig } from "../lib/intake/fixtures";
 
@@ -24,7 +25,7 @@ const DATABASE_URL =
 const MERCHANT_ID = "00000000-0000-0000-0000-000000000001";
 
 const client = new Client({ connectionString: DATABASE_URL });
-const db = client as unknown as Queryable;
+const db = clientDatabase(client);
 
 beforeAll(async () => {
   await client.connect();

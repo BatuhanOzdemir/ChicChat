@@ -28,6 +28,27 @@ describe("intake machine — selection", () => {
   });
 });
 
+describe("intake machine — recovers when the taxonomy changes mid-session", () => {
+  it("asks for a category again instead of throwing when the selected one disappears", () => {
+    let s: IntakeSession = startIntake(config);
+    s = advance(config, s.state, "return");
+    s = advance(config, s.state, "doesnt_fit"); // now collecting fields
+
+    // The merchant disables/renames the category while the customer is mid-intake.
+    const shrunk = {
+      ...config,
+      categories: config.categories.filter((c) => c.key !== "return"),
+    };
+    const recovered = advance(shrunk, s.state, "TR100432");
+    expect(recovered.prompt).toMatchObject({
+      kind: "select_category",
+      retry: true,
+    });
+    expect(recovered.state.status).toBe("selecting_category");
+    expect(recovered.state.categoryKey).toBeUndefined();
+  });
+});
+
 describe("intake machine — invalid field input is re-asked", () => {
   function toOrderNumberPrompt(): IntakeSession {
     let s: IntakeSession = startIntake(config);

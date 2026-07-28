@@ -4,11 +4,15 @@
  * Reads DATABASE_URL (see .env.example); falls back to the local Supabase URL.
  */
 import { Pool } from "pg";
+import { poolDatabase, type Database } from "./database";
 
 const LOCAL_DEFAULT = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
 // Reuse the pool across hot-reloads in dev.
-const globalForPg = globalThis as unknown as { chicchatPgPool?: Pool };
+const globalForPg = globalThis as unknown as {
+  chicchatPgPool?: Pool;
+  chicchatDatabase?: Database;
+};
 
 export function getPool(): Pool {
   if (!globalForPg.chicchatPgPool) {
@@ -17,4 +21,12 @@ export function getPool(): Pool {
     });
   }
   return globalForPg.chicchatPgPool;
+}
+
+/** The transactional database handle the server layers depend on. */
+export function getDatabase(): Database {
+  if (!globalForPg.chicchatDatabase) {
+    globalForPg.chicchatDatabase = poolDatabase(getPool());
+  }
+  return globalForPg.chicchatDatabase;
 }

@@ -5,6 +5,20 @@ Audit performed at v0.2 Step 0 against commit `5faa804` (end of v0.1).
 records the Handbook/SPEC rule, evidence (file:line), severity, and the v0.2
 step that is scheduled to resolve it.
 
+### Progress
+
+| Step | Resolved findings |
+|---|---|
+| Step 0 | R1 (typecheck script) |
+| Step 1 | R5 (dead `health.ts`), R6b (seed-test isolation) |
+| Step 2 | **R3, R4, R8, R9, R11, R12, R14, R15, R16, R17, R19** — all six HIGH boundary/reliability findings plus the medium ones in scope |
+
+Still open: R2 (`node:crypto` in `lib` — a decision, not a defect), R6 (untested
+`saveConfig`, Step 3), R7 (fixture in `lib`), R10 (declarative validation now
+covers the webhook and simulator boundaries; the config form is Step 3), R13
+(KVKK, Steps 2–4 → carried), R18 (enum prompts as tappable lists), R20 (Step 6),
+R21 (field ordering, Step 3), R22 (remaining v0.2 scope).
+
 Severity: **HIGH** = correctness/security risk in production · **MED** =
 standards violation with real consequences · **LOW** = hygiene.
 

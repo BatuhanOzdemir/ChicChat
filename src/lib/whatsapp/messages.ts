@@ -58,6 +58,30 @@ function text(to: string, body: string): OutboundMessage {
   return { to, type: "text", text: { body } };
 }
 
+/**
+ * The single gentle resume prompt sent after `nudge_after_minutes` of silence
+ * (SPEC §11). The spec's Turkish example reads "Devam etmek ister misiniz?
+ * Kaldığınız yerden sürdürebiliriz."; copy here stays in the same language as
+ * the rest of the bot's messages until localization is a first-class concern.
+ */
+export function nudgeMessage(to: string): OutboundMessage {
+  return text(
+    to,
+    "Still there? We can pick up right where you left off — your answers are saved.",
+  );
+}
+
+/**
+ * Generic customer-facing failure message (SPEC §13): never leaks diagnostics,
+ * and promises a human follow-up because the case may be incomplete.
+ */
+export function genericErrorMessage(to: string): OutboundMessage {
+  return text(
+    to,
+    "Sorry — something went wrong on our side. An agent will follow up with you shortly.",
+  );
+}
+
 export function promptToMessage(prompt: Prompt, to: string): OutboundMessage {
   switch (prompt.kind) {
     case "select_category":

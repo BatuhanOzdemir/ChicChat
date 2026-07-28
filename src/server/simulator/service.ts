@@ -11,7 +11,8 @@ import type { OutboundMessage } from "@/lib/whatsapp";
 import type { IntakeState } from "@/lib/intake";
 import { buildInboundEnvelope } from "@/lib/simulator/envelope";
 import type { SimulatorRequest } from "@/lib/simulator/protocol";
-import { buildHandoff, type HandoffPackage, type Queryable } from "@/db/cases";
+import { buildHandoff, type HandoffPackage } from "@/db/cases";
+import type { Database, Queryable } from "@/db/database";
 import {
   ageSession,
   deleteSession,
@@ -19,6 +20,7 @@ import {
   type SessionMeta,
 } from "@/db/sessions";
 import { handleInbound } from "@/server/whatsapp/handler";
+import { runSessionMaintenance } from "@/server/maintenance/sessions";
 
 /** The simulator's own phone_number_id — never a real Meta one. */
 export const SIMULATOR_PHONE_NUMBER_ID = "SIMULATOR";
@@ -64,7 +66,7 @@ function emptyResponse(): SimulatorResponse {
 }
 
 export async function runSimulatorAction(
-  db: Queryable,
+  db: Database,
   request: SimulatorRequest,
 ): Promise<SimulatorResponse> {
   const { merchantId, phone } = request;
@@ -72,6 +74,30 @@ export async function runSimulatorAction(
   if (request.action === "reset") {
     await deleteSession(db, merchantId, phone);
     return emptyResponse();
+  }
+
+  if (request.action === "maintenance") {
+    const outbound: OutboundMessage[] = [];
+    const summary = await runSessionMaintenance(
+      {
+        db,
+        send: async (msg) => {
+          outbound.push(msg);
+        },
+      },
+      new Date(),
+      merchantId,
+    );
+    const { state, meta } = await readSession(db, merchantId, phone);
+    return {
+      ...emptyResponse(),
+      outbound,
+      session: state,
+      sessionMeta: meta,
+      notice:
+        `maintenance: nudged ${summary.nudged}, abandoned ${summary.abandoned}, ` +
+        `deleted ${summary.deleted}`,
+    };
   }
 
   if (request.action === "time_travel") {
@@ -110,8 +136,12 @@ export async function runSimulatorAction(
   });
 
   const outbound: OutboundMessage[] = [];
+  // `handler_exception` fails only the first send, so the handler's recovery
+  // path (generic customer message, SPEC §13) is still observable here.
+  let sendsAttempted = 0;
   const recordingSend = async (msg: OutboundMessage): Promise<void> => {
-    if (request.injectError === "handler_exception") {
+    sendsAttempted += 1;
+    if (request.injectError === "handler_exception" && sendsAttempted === 1) {
       throw new Error("injected simulator failure (handler_exception)");
     }
     outbound.push(msg);
@@ -122,13 +152,19 @@ export async function runSimulatorAction(
 
   for (const inbound of parseInbound(envelope)) {
     try {
-      const { persistedCaseId } = await handleInbound(
+      const result = await handleInbound(
         { db, send: recordingSend },
         merchantId,
         inbound,
       );
-      if (persistedCaseId) {
-        completedCase = await buildHandoff(db, persistedCaseId);
+      if (result.persistedCaseId) {
+        completedCase = await buildHandoff(db, result.persistedCaseId);
+      }
+      if (result.duplicate) {
+        error = "duplicate delivery skipped (idempotency)";
+      } else if (result.failed) {
+        error =
+          "processing failed — generic reply sent, session marked errored";
       }
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);

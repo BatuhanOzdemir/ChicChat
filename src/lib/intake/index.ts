@@ -3,6 +3,13 @@
  * framework-free, plus a local message simulator for driving it without WhatsApp.
  */
 export { startIntake, advance } from "./machine";
+export { inactivityAction } from "./inactivity";
+export type {
+  InactivityAction,
+  InactivityThresholds,
+  SessionLifecycle,
+  SessionTiming,
+} from "./inactivity";
 export { simulateIntake } from "./simulator";
 export type { SimulationScript, SimulationResult } from "./simulator";
 export type {

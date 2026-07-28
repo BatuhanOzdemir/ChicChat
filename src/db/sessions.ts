@@ -19,6 +19,10 @@ export async function loadSession(
   return row?.state ?? null;
 }
 
+/**
+ * Save progress. Any customer activity returns the session to `active` and
+ * clears a previous error — progress is never discarded (SPEC §11).
+ */
 export async function saveSession(
   db: Queryable,
   merchantId: string,
@@ -29,8 +33,32 @@ export async function saveSession(
     `insert into intake_sessions (merchant_id, customer_wa_id, state)
      values ($1, $2, $3)
      on conflict (merchant_id, customer_wa_id) do update
-       set state = excluded.state, updated_at = now()`,
+       set state = excluded.state, updated_at = now(),
+           status = 'active', last_error = null`,
     [merchantId, customerWaId, JSON.stringify(state)],
+  );
+}
+
+export type SessionStatus = "active" | "nudged" | "errored";
+
+/**
+ * Mark a session's lifecycle state without touching `updated_at`, so a nudge or
+ * an error does not look like fresh customer activity to the maintenance job.
+ */
+export async function setSessionStatus(
+  db: Queryable,
+  merchantId: string,
+  customerWaId: string,
+  status: SessionStatus,
+  lastError?: string,
+): Promise<void> {
+  await db.query(
+    `update intake_sessions
+        set status = $3,
+            last_error = $4,
+            nudged_at = case when $3 = 'nudged' then now() else nudged_at end
+      where merchant_id = $1 and customer_wa_id = $2`,
+    [merchantId, customerWaId, status, lastError ?? null],
   );
 }
 

@@ -22,13 +22,39 @@ import type {
   Option,
 } from "./types";
 
-function getCategory(
+/**
+ * Look up a category. Returns undefined rather than throwing (Handbook §3): a
+ * live session can outlive the category it selected — the merchant may disable
+ * or rename it mid-conversation — and the machine recovers by asking again
+ * instead of failing the conversation.
+ */
+function findCategory(
   config: IntakeConfig,
   key: string | undefined,
-): CategoryDef {
-  const cat = config.categories.find((c) => c.key === key);
-  if (!cat) throw new Error(`unknown category: ${String(key)}`);
-  return cat;
+): CategoryDef | undefined {
+  return config.categories.find((c) => c.key === key);
+}
+
+/** A fresh category selection, used to start and to recover. */
+function categoryPrompt(
+  config: IntakeConfig,
+  state: IntakeState,
+  retry: boolean,
+): IntakeSession {
+  return {
+    state: {
+      ...state,
+      status: "selecting_category",
+      categoryKey: undefined,
+      subcategoryKey: undefined,
+      pendingFieldKey: undefined,
+    },
+    prompt: {
+      kind: "select_category",
+      options: categoryOptions(config),
+      retry,
+    },
+  };
 }
 
 function categoryOptions(config: IntakeConfig): Option[] {
@@ -89,8 +115,7 @@ function normalizeField(
   };
 }
 
-function assemble(config: IntakeConfig, state: IntakeState): IntakeCase {
-  const cat = getCategory(config, state.categoryKey);
+function assemble(cat: CategoryDef, state: IntakeState): IntakeCase {
   const fields = cat.fields
     .filter((fd) => isCollected(state.fields, fd.key))
     .map((fd) => ({
@@ -106,46 +131,33 @@ function assemble(config: IntakeConfig, state: IntakeState): IntakeCase {
   };
 }
 
-/** Decide what to ask next given the current (already-transitioned) state. */
-function proceed(config: IntakeConfig, state: IntakeState): IntakeSession {
-  if (state.status === "selecting_category") {
-    return {
-      state,
-      prompt: {
-        kind: "select_category",
-        options: categoryOptions(config),
-        retry: false,
-      },
-    };
+/** Fold classifier-extracted raw values into the captured set, once. */
+function foldInitialFields(
+  cat: CategoryDef,
+  state: IntakeState,
+  config: IntakeConfig,
+): IntakeState {
+  if (Object.keys(state.pendingInitial).length === 0) {
+    return { ...state, pendingInitial: {} };
   }
-
-  if (state.status === "selecting_subcategory") {
-    const cat = getCategory(config, state.categoryKey);
-    return {
-      state,
-      prompt: {
-        kind: "select_subcategory",
-        category: cat.key,
-        options: cat.subcategories,
-        retry: false,
-      },
-    };
-  }
-
-  // collecting_fields: fold any pre-extracted fields once, then find the gap.
-  const cat = getCategory(config, state.categoryKey);
-  let fields = state.fields;
-  if (Object.keys(state.pendingInitial).length > 0) {
-    fields = { ...fields };
-    for (const fd of cat.fields) {
-      const raw = state.pendingInitial[fd.key];
-      if (raw !== undefined && !isCollected(fields, fd.key)) {
-        const captured = normalizeField(fd, raw, config);
-        if (captured.valid) fields[fd.key] = captured;
-      }
+  const fields = { ...state.fields };
+  for (const fd of cat.fields) {
+    const raw = state.pendingInitial[fd.key];
+    if (raw !== undefined && !isCollected(fields, fd.key)) {
+      const captured = normalizeField(fd, raw, config);
+      if (captured.valid) fields[fd.key] = captured;
     }
   }
-  const folded: IntakeState = { ...state, fields, pendingInitial: {} };
+  return { ...state, fields, pendingInitial: {} };
+}
+
+/** Ask for the next missing required field, or complete the case. */
+function collectFields(
+  config: IntakeConfig,
+  cat: CategoryDef,
+  state: IntakeState,
+): IntakeSession {
+  const folded = foldInitialFields(cat, state, config);
 
   const next = cat.fields.find(
     (fd) => fd.required && !isCollected(folded.fields, fd.key),
@@ -164,8 +176,33 @@ function proceed(config: IntakeConfig, state: IntakeState): IntakeSession {
   };
   return {
     state: complete,
-    prompt: { kind: "complete", case: assemble(config, complete) },
+    prompt: { kind: "complete", case: assemble(cat, complete) },
   };
+}
+
+/** Decide what to ask next given the current (already-transitioned) state. */
+function proceed(config: IntakeConfig, state: IntakeState): IntakeSession {
+  if (state.status === "selecting_category") {
+    return categoryPrompt(config, state, false);
+  }
+
+  const cat = findCategory(config, state.categoryKey);
+  // The selected category disappeared (disabled/renamed) — recover, don't fail.
+  if (!cat) return categoryPrompt(config, state, true);
+
+  if (state.status === "selecting_subcategory") {
+    return {
+      state,
+      prompt: {
+        kind: "select_subcategory",
+        category: cat.key,
+        options: cat.subcategories,
+        retry: false,
+      },
+    };
+  }
+
+  return collectFields(config, cat, state);
 }
 
 /** Begin an intake session. `initialFields` are raw values a classifier already extracted. */
@@ -181,80 +218,98 @@ export function startIntake(
   return proceed(config, state);
 }
 
+function pickCategory(
+  config: IntakeConfig,
+  state: IntakeState,
+  message: string,
+): IntakeSession {
+  const opt = matchOption(message, categoryOptions(config));
+  if (!opt) return categoryPrompt(config, state, true);
+
+  const cat = findCategory(config, opt.key);
+  if (!cat) return categoryPrompt(config, state, true);
+
+  return proceed(config, {
+    ...state,
+    categoryKey: cat.key,
+    status:
+      cat.subcategories.length > 0
+        ? "selecting_subcategory"
+        : "collecting_fields",
+  });
+}
+
+function pickSubcategory(
+  config: IntakeConfig,
+  cat: CategoryDef,
+  state: IntakeState,
+  message: string,
+): IntakeSession {
+  const opt = matchOption(message, cat.subcategories);
+  if (!opt) {
+    return {
+      state,
+      prompt: {
+        kind: "select_subcategory",
+        category: cat.key,
+        options: cat.subcategories,
+        retry: true,
+      },
+    };
+  }
+  return proceed(config, {
+    ...state,
+    subcategoryKey: opt.key,
+    status: "collecting_fields",
+  });
+}
+
+function captureField(
+  config: IntakeConfig,
+  cat: CategoryDef,
+  state: IntakeState,
+  message: string,
+): IntakeSession {
+  const field = cat.fields.find((f) => f.key === state.pendingFieldKey);
+  if (!field) return proceed(config, state);
+
+  const captured = normalizeField(field, message, config);
+  const next: IntakeState = {
+    ...state,
+    fields: { ...state.fields, [field.key]: captured },
+  };
+  if (!captured.valid) {
+    return {
+      state: next,
+      prompt: { kind: "request_field", field, retry: true },
+    };
+  }
+  return proceed(config, next);
+}
+
 /** Fold one inbound message into the session and return the next prompt. */
 export function advance(
   config: IntakeConfig,
   state: IntakeState,
   message: string,
 ): IntakeSession {
+  if (state.status === "selecting_category") {
+    return pickCategory(config, state, message);
+  }
+
+  const cat = findCategory(config, state.categoryKey);
+  // The selected category disappeared mid-conversation — ask again.
+  if (!cat) return categoryPrompt(config, state, true);
+
   switch (state.status) {
-    case "selecting_category": {
-      const opt = matchOption(message, categoryOptions(config));
-      if (!opt) {
-        return {
-          state,
-          prompt: {
-            kind: "select_category",
-            options: categoryOptions(config),
-            retry: true,
-          },
-        };
-      }
-      const cat = getCategory(config, opt.key);
-      return proceed(config, {
-        ...state,
-        categoryKey: cat.key,
-        status:
-          cat.subcategories.length > 0
-            ? "selecting_subcategory"
-            : "collecting_fields",
-      });
-    }
-
-    case "selecting_subcategory": {
-      const cat = getCategory(config, state.categoryKey);
-      const opt = matchOption(message, cat.subcategories);
-      if (!opt) {
-        return {
-          state,
-          prompt: {
-            kind: "select_subcategory",
-            category: cat.key,
-            options: cat.subcategories,
-            retry: true,
-          },
-        };
-      }
-      return proceed(config, {
-        ...state,
-        subcategoryKey: opt.key,
-        status: "collecting_fields",
-      });
-    }
-
-    case "collecting_fields": {
-      const cat = getCategory(config, state.categoryKey);
-      const field = cat.fields.find((f) => f.key === state.pendingFieldKey);
-      if (!field) return proceed(config, state);
-
-      const captured = normalizeField(field, message, config);
-      const next: IntakeState = {
-        ...state,
-        fields: { ...state.fields, [field.key]: captured },
-      };
-      if (!captured.valid) {
-        return {
-          state: next,
-          prompt: { kind: "request_field", field, retry: true },
-        };
-      }
-      return proceed(config, next);
-    }
-
+    case "selecting_subcategory":
+      return pickSubcategory(config, cat, state, message);
+    case "collecting_fields":
+      return captureField(config, cat, state, message);
     case "complete":
       return {
         state,
-        prompt: { kind: "complete", case: assemble(config, state) },
+        prompt: { kind: "complete", case: assemble(cat, state) },
       };
   }
 }

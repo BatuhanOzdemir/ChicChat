@@ -17,6 +17,7 @@ interface ControlPanelProps {
   onSendFlow: (responseJson: string) => void;
   onRunPreset: (preset: Preset) => void;
   onTimeTravel: (minutes: number) => void;
+  onRunMaintenance: () => void;
   onReset: () => void;
 }
 
@@ -35,6 +36,7 @@ export function ControlPanel({
   onSendFlow,
   onRunPreset,
   onTimeTravel,
+  onRunMaintenance,
   onReset,
 }: ControlPanelProps) {
   const field =
@@ -142,6 +144,15 @@ export function ControlPanel({
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          className={`${button} w-full`}
+          disabled={busy}
+          onClick={onRunMaintenance}
+          title="Runs the inactivity job: nudge after nudge_after_minutes, abandon after abandon_after_hours"
+        >
+          🧹 Run maintenance now
+        </button>
       </div>
 
       <button

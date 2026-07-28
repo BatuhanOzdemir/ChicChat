@@ -9,7 +9,8 @@ import {
   it,
 } from "vitest";
 import { Client } from "pg";
-import { buildHandoff, type Queryable } from "./cases";
+import { buildHandoff } from "./cases";
+import { clientDatabase } from "./database";
 import { DEMO_MERCHANT_ID } from "./config";
 import { loadSession } from "./sessions";
 import { handleInbound } from "../server/whatsapp/handler";
@@ -25,7 +26,7 @@ const DATABASE_URL =
   "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
 const client = new Client({ connectionString: DATABASE_URL });
-const db = client as unknown as Queryable;
+const db = clientDatabase(client);
 const FROM = "905550000009";
 
 const sent: OutboundMessage[] = [];
@@ -36,6 +37,10 @@ const deps = {
   },
 };
 
+// Every real delivery has its own id; reusing one would (correctly) be skipped
+// as a duplicate now that processing is idempotent (SPEC §11).
+let messageCounter = 0;
+
 function inbound(
   kind: InboundMessage["kind"],
   reply: string,
@@ -44,7 +49,7 @@ function inbound(
   return {
     phoneNumberId: "PNID",
     from: FROM,
-    messageId: "m",
+    messageId: `wamid.test.${++messageCounter}`,
     kind,
     reply,
     mediaId,
