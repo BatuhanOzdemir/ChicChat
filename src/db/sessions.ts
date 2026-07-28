@@ -44,3 +44,45 @@ export async function deleteSession(
     [merchantId, customerWaId],
   );
 }
+
+/**
+ * Shift a session's timestamps into the past — the simulator's time-travel
+ * control (SPEC §7), used to exercise inactivity behaviour without waiting.
+ * Returns true when a session was aged.
+ */
+export async function ageSession(
+  db: Queryable,
+  merchantId: string,
+  customerWaId: string,
+  minutes: number,
+): Promise<boolean> {
+  const { rows } = await db.query(
+    `update intake_sessions
+        set created_at = created_at - ($3 * interval '1 minute'),
+            updated_at = updated_at - ($3 * interval '1 minute')
+      where merchant_id = $1 and customer_wa_id = $2
+      returning id`,
+    [merchantId, customerWaId, minutes],
+  );
+  return rows.length > 0;
+}
+
+/** Session row with its (possibly aged) timestamps, for the simulator inspector. */
+export interface SessionMeta {
+  state: IntakeState;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function loadSessionMeta(
+  db: Queryable,
+  merchantId: string,
+  customerWaId: string,
+): Promise<SessionMeta | null> {
+  const { rows } = await db.query(
+    `select state, created_at, updated_at
+       from intake_sessions where merchant_id = $1 and customer_wa_id = $2`,
+    [merchantId, customerWaId],
+  );
+  return (rows[0] as SessionMeta | undefined) ?? null;
+}

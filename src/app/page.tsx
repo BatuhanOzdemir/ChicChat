@@ -10,12 +10,20 @@ export default function Home() {
           Phase A core is in place. See <code>CLAUDE.md</code> for the build
           plan.
         </p>
-        <a
-          href="/config"
-          className="mx-auto mt-2 rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          Merchant configuration →
-        </a>
+        <div className="mx-auto mt-2 flex flex-wrap justify-center gap-2">
+          <a
+            href="/simulator"
+            className="rounded-full bg-emerald-700 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-600"
+          >
+            Chat simulator →
+          </a>
+          <a
+            href="/config"
+            className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            Merchant configuration →
+          </a>
+        </div>
       </main>
     </div>
   );

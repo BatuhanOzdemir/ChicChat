@@ -19,11 +19,17 @@ export interface IntakeDeps {
   send: (message: OutboundMessage) => Promise<void>;
 }
 
+/** Outcome of handling one inbound message. */
+export interface IntakeResult {
+  /** Set when this message completed the intake and a case was written. */
+  persistedCaseId: string | null;
+}
+
 export async function handleInbound(
   deps: IntakeDeps,
   merchantId: string,
   inbound: InboundMessage,
-): Promise<void> {
+): Promise<IntakeResult> {
   const config = await buildIntakeConfig(deps.db, merchantId);
   const existing = await loadSession(deps.db, merchantId, inbound.from);
 
@@ -34,9 +40,10 @@ export async function handleInbound(
       ? startIntake(config)
       : advance(config, existing, inbound.reply);
 
+  let persistedCaseId: string | null = null;
   if (session.prompt.kind === "complete") {
     const structured = session.prompt.case;
-    await persistCase(deps.db, {
+    persistedCaseId = await persistCase(deps.db, {
       merchantId,
       customerWaId: inbound.from,
       categoryKey: structured.category,
@@ -50,4 +57,6 @@ export async function handleInbound(
   }
 
   await deps.send(promptToMessage(session.prompt, inbound.from));
+
+  return { persistedCaseId };
 }

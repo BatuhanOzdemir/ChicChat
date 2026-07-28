@@ -50,6 +50,16 @@ export interface EditableMerchantConfig {
   categories: EditableCategory[];
 }
 
+/** Merchants available to pick from (simulator selector, SPEC §7). */
+export async function listMerchants(
+  db: Queryable,
+): Promise<{ id: string; name: string; locale: string; rtl: boolean }[]> {
+  const { rows } = await db.query(
+    `select id, name, locale, rtl from merchants order by name`,
+  );
+  return rows as { id: string; name: string; locale: string; rtl: boolean }[];
+}
+
 /** Load the full editable config for a merchant (all categories, enabled or not). */
 export async function loadMerchantConfig(
   db: Queryable,

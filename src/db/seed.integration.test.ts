@@ -15,6 +15,9 @@ const MERCHANT_ID = "00000000-0000-0000-0000-000000000001";
 const CASE_ID = "00000000-0000-0000-0000-000000000002";
 
 // Expected row counts for the demo merchant after seeding (transcribed from §1).
+// Every count is scoped to seeded rows only — `cases` counts the seeded demo
+// case by id, so real cases (from the simulator or a live conversation) do not
+// break this assertion (RETROFIT R6b).
 const EXPECTED_COUNTS = {
   merchants: 1,
   merchant_config: 1,
@@ -47,7 +50,7 @@ async function countsForDemoMerchant() {
         join categories c on c.id = fd.category_id where c.merchant_id = $1
      union all select 'routing_rules', count(*) from routing_rules rr
         join categories c on c.id = rr.category_id where c.merchant_id = $1
-     union all select 'cases', count(*) from cases where merchant_id = $1
+     union all select 'cases', count(*) from cases where merchant_id = $1 and id = $2
      union all select 'case_fields', count(*) from case_fields where case_id = $2
      union all select 'case_items', count(*) from case_items where case_id = $2`,
     [MERCHANT_ID, CASE_ID],

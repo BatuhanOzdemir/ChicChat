@@ -8,11 +8,16 @@ export interface InboundMessage {
   phoneNumberId: string;
   from: string; // customer wa_id
   messageId: string;
-  kind: "text" | "interactive" | "image" | "other";
-  /** The value to feed intake `advance()`: list-reply id, text body, or media id. */
+  kind: "text" | "interactive" | "image" | "flow" | "other";
+  /**
+   * The value to feed intake `advance()`: list-reply id, text body, media id,
+   * or a Flow submission value (see `flowResponse`).
+   */
   reply: string;
   /** Present for image messages (a WhatsApp media id used as the photo ref). */
   mediaId?: string;
+  /** Raw `response_json` of a Flow submission (kind `flow`), for later screens. */
+  flowResponse?: string;
 }
 
 export interface ListRow {

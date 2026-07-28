@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInbound } from "./inbound";
+import { flowReplyValue, parseInbound } from "./inbound";
 
 function envelope(message: unknown) {
   return {
@@ -77,5 +77,40 @@ describe("parseInbound", () => {
   it("never throws on malformed input", () => {
     expect(parseInbound(null)).toEqual([]);
     expect(parseInbound({})).toEqual([]);
+  });
+
+  it("parses a Flow submission (nfm_reply) into a flow message", () => {
+    const response_json = JSON.stringify({ condition: "unworn_tags_on" });
+    const [m] = parseInbound(
+      envelope({
+        from: "9055",
+        id: "wamid.4",
+        type: "interactive",
+        interactive: { type: "nfm_reply", nfm_reply: { response_json } },
+      }),
+    );
+    expect(m).toMatchObject({
+      kind: "flow",
+      reply: "unworn_tags_on",
+      flowResponse: response_json,
+    });
+  });
+});
+
+describe("flowReplyValue", () => {
+  it("unwraps a single-key scalar payload", () => {
+    expect(flowReplyValue('{"order_number":"TR100432"}')).toBe("TR100432");
+    expect(flowReplyValue('{"qty":2}')).toBe("2");
+  });
+
+  it("passes richer payloads through as raw JSON (item picker is a later step)", () => {
+    const multi = '{"selected_items":["li_1","li_2"]}';
+    expect(flowReplyValue(multi)).toBe(multi);
+    const twoKeys = '{"a":"1","b":"2"}';
+    expect(flowReplyValue(twoKeys)).toBe(twoKeys);
+  });
+
+  it("returns the input unchanged when it is not JSON", () => {
+    expect(flowReplyValue("not json")).toBe("not json");
   });
 });

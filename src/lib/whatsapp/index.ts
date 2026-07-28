@@ -4,6 +4,6 @@
  * network transport and orchestration live under src/server/whatsapp.
  */
 export { verifyWebhookChallenge, verifySignature } from "./verify";
-export { parseInbound } from "./inbound";
+export { parseInbound, flowReplyValue } from "./inbound";
 export { promptToMessage } from "./messages";
 export type { InboundMessage, OutboundMessage, ListRow } from "./types";
