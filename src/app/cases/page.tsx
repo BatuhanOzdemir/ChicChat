@@ -6,7 +6,9 @@ import {
   formatPercent,
 } from "@/lib/cases/analytics";
 import { getDatabase } from "@/db/client";
-import { DEMO_MERCHANT_ID, loadMerchantConfig } from "@/db/config";
+import { loadMerchantConfig } from "@/db/config";
+import { merchantContext } from "@/server/merchant/current";
+import { MerchantSwitcher } from "../merchant-switcher";
 import {
   caseCounters,
   listCases,
@@ -36,7 +38,20 @@ export default async function CasesPage({
   const params = await searchParams;
   const parsed = parseCaseFilters(params);
   const db = getDatabase();
-  const config = await loadMerchantConfig(db, DEMO_MERCHANT_ID);
+
+  const merchant = await merchantContext(db);
+  if (!merchant) {
+    return (
+      <main className="mx-auto max-w-5xl p-6">
+        <h1 className="text-2xl font-semibold">Cases</h1>
+        <p className="mt-4 text-sm text-zinc-500">
+          No merchants yet. Run <code>npm run db:seed</code>.
+        </p>
+      </main>
+    );
+  }
+  const merchantId = merchant.current.id;
+  const config = await loadMerchantConfig(db, merchantId);
 
   if (!parsed.ok) {
     return (
@@ -54,9 +69,9 @@ export default async function CasesPage({
 
   const filters = parsed.value;
   const [page, counters, errored] = await Promise.all([
-    listCases(db, DEMO_MERCHANT_ID, filters),
-    caseCounters(db, DEMO_MERCHANT_ID),
-    listErroredSessions(db, DEMO_MERCHANT_ID),
+    listCases(db, merchantId, filters),
+    caseCounters(db, merchantId),
+    listErroredSessions(db, merchantId),
   ]);
 
   const pages = Math.max(1, Math.ceil(page.total / PAGE_SIZE));
@@ -64,7 +79,10 @@ export default async function CasesPage({
   return (
     <main className="mx-auto max-w-6xl p-6 text-zinc-900 dark:text-zinc-100">
       <header className="mb-4">
-        <h1 className="text-2xl font-semibold">Cases</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 className="text-2xl font-semibold">Cases</h1>
+          <MerchantSwitcher context={merchant} back="/cases" />
+        </div>
         <p className="text-sm text-zinc-500">
           {page.total} case(s) matching · last 30 days of counters ·{" "}
           <Link className="underline" href="/console">

@@ -23,7 +23,12 @@ import { logger as defaultLogger, type Logger } from "@/server/logging/logger";
 
 export interface MaintenanceDeps {
   db: Database;
-  send: (message: OutboundMessage) => Promise<void>;
+  /**
+   * Sends on behalf of one merchant. The job sweeps every tenant, and a nudge
+   * has to go out from that merchant's own number (SPEC §10), so the sender is
+   * resolved per merchant rather than fixed for the run.
+   */
+  send: (merchantId: string, message: OutboundMessage) => Promise<void>;
   logger?: Logger;
 }
 
@@ -137,7 +142,7 @@ export async function runSessionMaintenance(
         "nudged",
       );
       const nudge = nudgeMessage(row.customer_wa_id);
-      await deps.send(nudge);
+      await deps.send(row.merchant_id, nudge);
       // The nudge is part of the conversation an agent later reads (SPEC §9).
       await recordMessage(deps.db, {
         merchantId: row.merchant_id,

@@ -13,19 +13,13 @@ import {
   verifyWebhookChallenge,
 } from "@/lib/whatsapp";
 import { getDatabase } from "@/db/client";
-import { DEMO_MERCHANT_ID } from "@/db/config";
+import { resolveMerchantByPhoneNumberId } from "@/db/merchants";
 import { getWhatsAppConfig } from "@/server/whatsapp/config";
 import { graphSender } from "@/server/whatsapp/client";
 import { handleInbound } from "@/server/whatsapp/handler";
 import { logger } from "@/server/logging/logger";
 
 export const dynamic = "force-dynamic";
-
-// Single-tenant for now: every inbound routes to the demo merchant. Resolving
-// the merchant from `phone_number_id` is Step 6.
-function resolveMerchantId(): string {
-  return DEMO_MERCHANT_ID;
-}
 
 export function GET(req: Request): Response {
   const cfg = getWhatsAppConfig();
@@ -90,10 +84,27 @@ export async function POST(req: Request): Promise<Response> {
   // Acknowledge first, work afterwards (SPEC §10).
   after(async () => {
     const db = getDatabase();
-    const send = graphSender(cfg);
     for (const inbound of messages) {
       try {
-        await handleInbound({ db, send }, resolveMerchantId(), inbound);
+        // The number the message was sent to decides the tenant. An unknown
+        // number is dropped: replying from someone else's number, or filing the
+        // case against a guessed merchant, is worse than losing the message.
+        const channel = await resolveMerchantByPhoneNumberId(
+          db,
+          inbound.phoneNumberId,
+        );
+        if (!channel) {
+          logger.warn("webhook_rejected", {
+            reason: "unknown_phone_number_id",
+            correlationId: inbound.messageId,
+            phone_number_id: inbound.phoneNumberId,
+          });
+          continue;
+        }
+
+        // Reply from the merchant's own number, not the environment default.
+        const send = graphSender(cfg, channel.phoneNumberId);
+        await handleInbound({ db, send }, channel.merchantId, inbound);
       } catch (err) {
         // handleInbound already handles its own failures; this is belt-and-braces.
         logger.error("unexpected_exception", err, {

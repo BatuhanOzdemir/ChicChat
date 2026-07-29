@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parseNote } from "@/lib/cases/workflow";
 import { getDatabase } from "@/db/client";
-import { DEMO_MERCHANT_ID } from "@/db/config";
 import { addCaseNote, transitionCase } from "@/db/console";
+import { currentMerchantId } from "@/server/merchant/current";
 import { logger } from "@/server/logging/logger";
 
 /**
@@ -21,10 +21,10 @@ function field(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "");
 }
 
-function done(caseId: string, error?: string): never {
+function done(caseId: string, error?: string, merchantId?: string): never {
   if (error) {
     logger.warn("validation_failed", {
-      merchantId: DEMO_MERCHANT_ID,
+      merchantId,
       case_id: caseId,
       error,
     });
@@ -38,36 +38,36 @@ function done(caseId: string, error?: string): never {
 export async function changeStatus(formData: FormData): Promise<void> {
   const caseId = field(formData, "case_id");
   const to = field(formData, "to");
+  const db = getDatabase();
+
+  // The tenant comes from the switcher, never from the form, so a case id
+  // belonging to another merchant simply is not found (Step 6).
+  const merchantId = await currentMerchantId(db);
+  if (!merchantId) done(caseId, "no merchant selected");
 
   // A note alongside a transition is optional, but if given it must be valid.
   const rawNote = field(formData, "note").trim();
   let note: string | null = null;
   if (rawNote !== "") {
     const parsed = parseNote(rawNote);
-    if (!parsed.ok) done(caseId, parsed.error);
+    if (!parsed.ok) done(caseId, parsed.error, merchantId);
     note = parsed.value;
   }
 
-  const result = await transitionCase(
-    getDatabase(),
-    DEMO_MERCHANT_ID,
-    caseId,
-    to,
-    note,
-  );
-  done(caseId, result.ok ? undefined : result.error);
+  const result = await transitionCase(db, merchantId, caseId, to, note);
+  done(caseId, result.ok ? undefined : result.error, merchantId);
 }
 
 export async function addNote(formData: FormData): Promise<void> {
   const caseId = field(formData, "case_id");
-  const parsed = parseNote(field(formData, "note"));
-  if (!parsed.ok) done(caseId, parsed.error);
+  const db = getDatabase();
 
-  const result = await addCaseNote(
-    getDatabase(),
-    DEMO_MERCHANT_ID,
-    caseId,
-    parsed.value,
-  );
-  done(caseId, result.ok ? undefined : result.error);
+  const merchantId = await currentMerchantId(db);
+  if (!merchantId) done(caseId, "no merchant selected");
+
+  const parsed = parseNote(field(formData, "note"));
+  if (!parsed.ok) done(caseId, parsed.error, merchantId);
+
+  const result = await addCaseNote(db, merchantId, caseId, parsed.value);
+  done(caseId, result.ok ? undefined : result.error, merchantId);
 }

@@ -90,8 +90,14 @@ export async function listQueue(
     `select c.id, c.status, c.priority, c.queue,
             cat.key as category_key, cat.label as category_label,
             sub.key as subcategory_key, c.customer_wa_id, c.created_at,
-            (select f.normalized_value from case_fields f
-              where f.case_id = c.id and f.field_key = 'order_number') as order_number,
+            -- Whichever field the merchant normalizes as an order number, since
+            -- tenants name it differently (Step 6).
+            (select cf.normalized_value
+               from case_fields cf
+               join field_defs fd
+                 on fd.category_id = c.category_id and fd.key = cf.field_key
+              where cf.case_id = c.id and fd.normalize_rule = 'order_number'
+              order by fd.sort_order limit 1) as order_number,
             (select count(*)::int from case_events e
               where e.case_id = c.id and e.kind = 'note') as note_count
        from cases c

@@ -12,6 +12,17 @@ import type { Queryable } from "./database";
 
 export const PAGE_SIZE = 25;
 
+/**
+ * "The order number" is whichever field the merchant marked with the
+ * `order_number` normalization rule — not a field literally called
+ * `order_number`. A second tenant naming it `siparis_no` must still get an
+ * order column and an order search (Step 6).
+ */
+const ORDER_NUMBER_FIELD = `from case_fields cf
+       join field_defs fd
+         on fd.category_id = c.category_id and fd.key = cf.field_key
+      where cf.case_id = c.id and fd.normalize_rule = 'order_number'`;
+
 export interface CaseListRow {
   id: string;
   status: string;
@@ -56,9 +67,8 @@ function whereClause(filters: CaseFilters): {
   }
   if (filters.orderNumber) {
     parts.push(
-      `exists (select 1 from case_fields f
-                where f.case_id = c.id and f.field_key = 'order_number'
-                  and f.normalized_value = ${add(filters.orderNumber)})`,
+      `exists (select 1 ${ORDER_NUMBER_FIELD}
+                  and cf.normalized_value = ${add(filters.orderNumber)})`,
     );
   }
 
@@ -77,8 +87,8 @@ export async function listCases(
     `select c.id, c.status, c.priority, c.queue,
             cat.key as category_key, cat.label as category_label,
             sub.key as subcategory_key, c.customer_wa_id, c.created_at,
-            (select f.normalized_value from case_fields f
-              where f.case_id = c.id and f.field_key = 'order_number') as order_number,
+            (select cf.normalized_value ${ORDER_NUMBER_FIELD}
+              order by fd.sort_order limit 1) as order_number,
             (select count(*)::int from case_fields f where f.case_id = c.id) as field_count
        from cases c
        join categories cat on cat.id = c.category_id

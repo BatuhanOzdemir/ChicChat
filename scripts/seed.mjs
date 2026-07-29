@@ -20,6 +20,15 @@ const DATABASE_URL =
 // Fixed ids so re-runs target the same rows.
 const MERCHANT_ID = "00000000-0000-0000-0000-000000000001";
 const CASE_ID = "00000000-0000-0000-0000-000000000002";
+const SECOND_MERCHANT_ID = "00000000-0000-0000-0000-000000000003";
+
+// Inbound messages are routed by `phone_number_id` (Step 6), so the demo
+// merchant is linked to whatever number the environment points at — otherwise a
+// real WhatsApp message would arrive for a number no merchant owns and be
+// dropped. Falls back to a placeholder when no credentials are configured.
+const DEMO_PHONE_NUMBER_ID =
+  process.env.WHATSAPP_PHONE_NUMBER_ID ?? "demo-phone-number-id";
+const SECOND_PHONE_NUMBER_ID = "second-merchant-phone-number-id";
 
 const MERCHANT = {
   id: MERCHANT_ID,
@@ -349,6 +358,88 @@ const TAXONOMY = [
 ];
 
 // The demo "order" (case + line items). Tier 0: line ids are captured text.
+// A second tenant with a deliberately different taxonomy, so multi-tenancy is
+// demonstrable (Step 6): different keys, different labels, different language,
+// different policy windows, and its own queues.
+const SECOND_MERCHANT = {
+  id: SECOND_MERCHANT_ID,
+  name: "Butik Moda",
+  locale: "tr",
+  rtl: false,
+  currency: "TRY",
+  config: {
+    return_window_days: 14,
+    refund_sla_days: 7,
+    auto_approve_threshold: 250.0,
+    order_id_regex: "^BM[0-9]{5,}$",
+  },
+};
+
+const SECOND_TAXONOMY = [
+  {
+    key: "iade",
+    label: "İade talebi",
+    subcategories: [
+      ["beden", "Beden uymadı"],
+      ["fikir_degisti", "Vazgeçtim"],
+    ],
+    fields: [
+      ["siparis_no", "string", true, null, "order_number"],
+      ["urun", "ref", true, null, null],
+      ["durum", "enum", true, ["etiketli", "etiketsiz"], null],
+    ],
+    rules: [
+      {
+        condition: { all: [{ field: "durum", op: "eq", value: "etiketsiz" }] },
+        action_type: "escalate",
+        target_queue: "iade_istisna",
+        priority: "high",
+      },
+      {
+        condition: { all: [] },
+        action_type: "route",
+        target_queue: "iade_kuyrugu",
+        priority: "normal",
+      },
+    ],
+  },
+  {
+    key: "kargo",
+    label: "Kargo nerede?",
+    subcategories: [
+      ["gelmedi", "Hiç gelmedi"],
+      ["gecikti", "Gecikti"],
+    ],
+    fields: [["siparis_no", "string", true, null, "order_number"]],
+    rules: [
+      {
+        condition: {
+          all: [{ field: "subcategory", op: "eq", value: "gelmedi" }],
+        },
+        action_type: "escalate",
+        target_queue: "kargo_takip",
+        priority: "high",
+      },
+    ],
+  },
+];
+
+// Which WhatsApp number reaches which merchant (SPEC §10).
+const CHANNELS = [
+  {
+    merchantId: MERCHANT_ID,
+    phoneNumberId: DEMO_PHONE_NUMBER_ID,
+    wabaId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ?? null,
+    displayNumber: "Demo Apparel line",
+  },
+  {
+    merchantId: SECOND_MERCHANT_ID,
+    phoneNumberId: SECOND_PHONE_NUMBER_ID,
+    wabaId: null,
+    displayNumber: "Butik Moda line",
+  },
+];
+
 const DEMO_CASE = {
   id: CASE_ID,
   customer_wa_id: "+905551234567",
@@ -379,7 +470,8 @@ const DEMO_CASE = {
 
 const j = (v) => (v == null ? null : JSON.stringify(v));
 
-async function seed(client) {
+/** One tenant: merchant row, config, categories/subcategories/fields/rules. */
+async function seedMerchant(client, merchant, taxonomy) {
   // 1. Merchant + config
   await client.query(
     `insert into merchants (id, name, locale, rtl, currency)
@@ -388,11 +480,11 @@ async function seed(client) {
        set name = excluded.name, locale = excluded.locale,
            rtl = excluded.rtl, currency = excluded.currency`,
     [
-      MERCHANT.id,
-      MERCHANT.name,
-      MERCHANT.locale,
-      MERCHANT.rtl,
-      MERCHANT.currency,
+      merchant.id,
+      merchant.name,
+      merchant.locale,
+      merchant.rtl,
+      merchant.currency,
     ],
   );
   await client.query(
@@ -405,11 +497,11 @@ async function seed(client) {
            auto_approve_threshold = excluded.auto_approve_threshold,
            order_id_regex = excluded.order_id_regex`,
     [
-      MERCHANT.id,
-      MERCHANT.config.return_window_days,
-      MERCHANT.config.refund_sla_days,
-      MERCHANT.config.auto_approve_threshold,
-      MERCHANT.config.order_id_regex,
+      merchant.id,
+      merchant.config.return_window_days,
+      merchant.config.refund_sla_days,
+      merchant.config.auto_approve_threshold,
+      merchant.config.order_id_regex,
     ],
   );
 
@@ -417,12 +509,12 @@ async function seed(client) {
   await client.query(
     `delete from routing_rules
       where category_id in (select id from categories where merchant_id = $1)`,
-    [MERCHANT.id],
+    [merchant.id],
   );
 
   const categoryIdByKey = {};
-  for (let i = 0; i < TAXONOMY.length; i++) {
-    const cat = TAXONOMY[i];
+  for (let i = 0; i < taxonomy.length; i++) {
+    const cat = taxonomy[i];
     const {
       rows: [{ id: categoryId }],
     } = await client.query(
@@ -431,7 +523,7 @@ async function seed(client) {
        on conflict (merchant_id, key) do update
          set label = excluded.label, sort_order = excluded.sort_order, enabled = excluded.enabled
        returning id`,
-      [MERCHANT.id, cat.key, cat.label, i + 1],
+      [merchant.id, cat.key, cat.label, i + 1],
     );
     categoryIdByKey[cat.key] = categoryId;
 
@@ -492,6 +584,11 @@ async function seed(client) {
     }
   }
 
+  return categoryIdByKey;
+}
+
+/** The demo "order", which belongs to the first merchant only. */
+async function seedDemoCase(client, categoryIdByKey) {
   // 3. Demo order = demo case + case_items (+ a couple of case_fields).
   await client.query(
     `insert into cases
@@ -537,6 +634,40 @@ async function seed(client) {
   }
 }
 
+/** Channels are owned by the seed: one number per merchant, replaced on re-run. */
+async function seedChannels(client) {
+  // Drop numbers this seed no longer claims, so changing
+  // WHATSAPP_PHONE_NUMBER_ID re-links the merchant instead of leaving the old
+  // number attached to it as well.
+  await client.query(
+    `delete from whatsapp_channels
+      where merchant_id = any($1) and phone_number_id <> all($2)`,
+    [CHANNELS.map((c) => c.merchantId), CHANNELS.map((c) => c.phoneNumberId)],
+  );
+
+  for (const ch of CHANNELS) {
+    await client.query(
+      `insert into whatsapp_channels
+         (merchant_id, phone_number_id, waba_id, display_number, is_primary)
+       values ($1, $2, $3, $4, true)
+       on conflict (phone_number_id) do update
+         set merchant_id = excluded.merchant_id,
+             waba_id = excluded.waba_id,
+             display_number = excluded.display_number`,
+      [ch.merchantId, ch.phoneNumberId, ch.wabaId, ch.displayNumber],
+    );
+  }
+}
+
+async function seed(client) {
+  const categoryIdByKey = await seedMerchant(client, MERCHANT, TAXONOMY);
+  await seedDemoCase(client, categoryIdByKey);
+  // The second tenant exists so tenancy is exercised, not assumed: its taxonomy
+  // shares no keys with the first merchant's.
+  await seedMerchant(client, SECOND_MERCHANT, SECOND_TAXONOMY);
+  await seedChannels(client);
+}
+
 async function main() {
   const client = new Client({ connectionString: DATABASE_URL });
   await client.connect();
@@ -551,14 +682,32 @@ async function main() {
     await client.end();
   }
 
+  const count = (taxonomy, pick) => taxonomy.reduce((n, c) => n + pick(c), 0);
   console.log(
-    `[db:seed] Seeded merchant "${MERCHANT.name}": ` +
-      `${TAXONOMY.length} categories, ` +
-      `${TAXONOMY.reduce((n, c) => n + c.subcategories.length, 0)} subcategories, ` +
-      `${TAXONOMY.reduce((n, c) => n + c.fields.length, 0)} field defs, ` +
-      `${TAXONOMY.reduce((n, c) => n + c.rules.length, 0)} routing rules, ` +
+    `[db:seed] Seeded "${MERCHANT.name}": ${TAXONOMY.length} categories, ` +
+      `${count(TAXONOMY, (c) => c.subcategories.length)} subcategories, ` +
+      `${count(TAXONOMY, (c) => c.fields.length)} field defs, ` +
+      `${count(TAXONOMY, (c) => c.rules.length)} routing rules, ` +
       `1 demo order (${DEMO_CASE.items.length} line items).`,
   );
+  console.log(
+    `[db:seed] Seeded "${SECOND_MERCHANT.name}": ${SECOND_TAXONOMY.length} categories, ` +
+      `${count(SECOND_TAXONOMY, (c) => c.subcategories.length)} subcategories, ` +
+      `${count(SECOND_TAXONOMY, (c) => c.fields.length)} field defs, ` +
+      `${count(SECOND_TAXONOMY, (c) => c.rules.length)} routing rules.`,
+  );
+  for (const ch of CHANNELS) {
+    console.log(
+      `[db:seed] phone_number_id ${ch.phoneNumberId} -> ${ch.displayNumber}`,
+    );
+  }
+  if (!process.env.WHATSAPP_PHONE_NUMBER_ID) {
+    console.log(
+      "[db:seed] WHATSAPP_PHONE_NUMBER_ID is not set, so the demo merchant is " +
+        "linked to a placeholder number. Real inbound messages will be dropped " +
+        "as an unknown number until you re-seed with credentials configured.",
+    );
+  }
 }
 
 main().catch((err) => {

@@ -81,7 +81,9 @@ export async function runSimulatorAction(
     const summary = await runSessionMaintenance(
       {
         db,
-        send: async (msg) => {
+        // Scoped to one merchant below, so the sender ignores the tenant it is
+        // handed and simply records what would have gone out.
+        send: async (_merchantId, msg) => {
           outbound.push(msg);
         },
       },

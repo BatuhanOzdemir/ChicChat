@@ -5,8 +5,8 @@ import { nextStatuses } from "@/lib/cases/workflow";
 import { buildHandoff } from "@/db/cases";
 import { getDatabase } from "@/db/client";
 import { getCaseDetail } from "@/db/case-queries";
-import { DEMO_MERCHANT_ID } from "@/db/config";
 import { getCaseWorkflow, listCaseEvents } from "@/db/console";
+import { currentMerchantId } from "@/server/merchant/current";
 import { listTranscript } from "@/db/transcript";
 import {
   formatWhen,
@@ -43,15 +43,17 @@ export default async function ConsoleCasePage({
   const db = getDatabase();
 
   // Establishes merchant scope for everything below; `buildHandoff` and the
-  // event/transcript reads are keyed on the case id from here on.
-  const detail = await getCaseDetail(db, DEMO_MERCHANT_ID, id);
-  if (!detail) notFound();
+  // event/transcript reads are keyed on the case id from here on. A case
+  // belonging to another tenant is a 404, not a partially rendered page.
+  const merchantId = await currentMerchantId(db);
+  const detail = merchantId ? await getCaseDetail(db, merchantId, id) : null;
+  if (!detail || !merchantId) notFound();
 
   const [workflow, handoff, events, transcript] = await Promise.all([
-    getCaseWorkflow(db, DEMO_MERCHANT_ID, id),
+    getCaseWorkflow(db, merchantId, id),
     buildHandoff(db, id),
-    listCaseEvents(db, DEMO_MERCHANT_ID, id),
-    listTranscript(db, DEMO_MERCHANT_ID, id),
+    listCaseEvents(db, merchantId, id),
+    listTranscript(db, merchantId, id),
   ]);
   if (!workflow) notFound();
 

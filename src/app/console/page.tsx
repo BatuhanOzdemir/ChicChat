@@ -2,8 +2,10 @@ import Link from "next/link";
 import { ageLabel, CASE_STATUSES } from "@/lib/cases/workflow";
 import { UNROUTED_QUEUE } from "@/lib/cases/filters";
 import { getDatabase } from "@/db/client";
-import { DEMO_MERCHANT_ID, loadMerchantConfig } from "@/db/config";
+import { loadMerchantConfig } from "@/db/config";
 import { listQueue, listQueues, type QueueFilters } from "@/db/console";
+import { merchantContext } from "@/server/merchant/current";
+import { MerchantSwitcher } from "../merchant-switcher";
 import {
   maskedPhone,
   Panel,
@@ -47,10 +49,23 @@ export default async function ConsolePage({
   };
 
   const db = getDatabase();
+  const merchant = await merchantContext(db);
+  if (!merchant) {
+    return (
+      <main className="mx-auto max-w-5xl p-6">
+        <h1 className="text-2xl font-semibold">Agent console</h1>
+        <p className="mt-4 text-sm text-zinc-500">
+          No merchants yet. Run <code>npm run db:seed</code>.
+        </p>
+      </main>
+    );
+  }
+  const merchantId = merchant.current.id;
+
   const [rows, queues, config] = await Promise.all([
-    listQueue(db, DEMO_MERCHANT_ID, filters),
-    listQueues(db, DEMO_MERCHANT_ID),
-    loadMerchantConfig(db, DEMO_MERCHANT_ID),
+    listQueue(db, merchantId, filters),
+    listQueues(db, merchantId),
+    loadMerchantConfig(db, merchantId),
   ]);
 
   const outstanding = queues.reduce((sum, q) => sum + q.n, 0);
@@ -67,7 +82,10 @@ export default async function ConsolePage({
   return (
     <main className="mx-auto max-w-6xl p-6 text-zinc-900 dark:text-zinc-100">
       <header className="mb-4">
-        <h1 className="text-2xl font-semibold">Agent console</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 className="text-2xl font-semibold">Agent console</h1>
+          <MerchantSwitcher context={merchant} back="/console" />
+        </div>
         <p className="text-sm text-zinc-500">
           {outstanding} case(s) outstanding ·{" "}
           <Link className="underline" href="/cases">

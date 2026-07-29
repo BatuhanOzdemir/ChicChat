@@ -9,7 +9,12 @@
 import type { IntakeConfig, FieldType } from "../lib/intake";
 import type { Queryable } from "./cases";
 
-/** The demo merchant the config UI edits (no auth/merchant-switching in Phase A). */
+/**
+ * The seed's demo merchant. A **fixture id**, not a runtime default: since
+ * Step 6 the app resolves its tenant from the inbound `phone_number_id` (the
+ * webhook) or the console's merchant switcher, and nothing outside the seed and
+ * the tests refers to this constant.
+ */
 export const DEMO_MERCHANT_ID = "00000000-0000-0000-0000-000000000001";
 
 export interface EditableField {

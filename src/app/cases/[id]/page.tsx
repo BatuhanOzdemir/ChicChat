@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { formatDuration } from "@/lib/cases/analytics";
 import { getDatabase } from "@/db/client";
-import { DEMO_MERCHANT_ID } from "@/db/config";
 import { getCaseDetail } from "@/db/case-queries";
+import { currentMerchantId } from "@/server/merchant/current";
 import {
   formatWhen,
   maskedPhone,
@@ -21,7 +21,10 @@ export default async function CaseDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const detail = await getCaseDetail(getDatabase(), DEMO_MERCHANT_ID, id);
+  const db = getDatabase();
+  // Scoped to the selected merchant, so another tenant's case is a 404 here.
+  const merchantId = await currentMerchantId(db);
+  const detail = merchantId ? await getCaseDetail(db, merchantId, id) : null;
   if (!detail) notFound();
 
   const photos = detail.fields.filter(

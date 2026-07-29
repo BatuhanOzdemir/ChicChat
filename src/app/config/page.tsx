@@ -1,6 +1,9 @@
 import { getDatabase } from "@/db/client";
-import { DEMO_MERCHANT_ID, loadMerchantConfig } from "@/db/config";
+import { loadMerchantConfig } from "@/db/config";
+import { listChannels } from "@/db/merchants";
 import { listRules } from "@/db/taxonomy";
+import { merchantContext } from "@/server/merchant/current";
+import { MerchantSwitcher } from "../merchant-switcher";
 import { addCategory } from "./actions";
 import { CategoryEditor, type RuleRow } from "./category-editor";
 import { PolicyForm } from "./policy-form";
@@ -16,20 +19,29 @@ export default async function ConfigPage({
 }) {
   const { error } = await searchParams;
   const db = getDatabase();
-  const config = await loadMerchantConfig(db, DEMO_MERCHANT_ID);
+  // `merchantCtx` is the tenancy selection; `merchant` below is that merchant's
+  // own configuration row.
+  const merchantCtx = await merchantContext(db);
+  const config = merchantCtx
+    ? await loadMerchantConfig(db, merchantCtx.current.id)
+    : null;
 
-  if (!config) {
+  if (!merchantCtx || !config) {
     return (
       <main className="mx-auto max-w-2xl p-8">
         <h1 className="text-2xl font-semibold">Merchant configuration</h1>
         <p className="mt-4 text-red-600">
-          Demo merchant not found. Run <code>npm run db:seed</code> first.
+          No merchant found. Run <code>npm run db:seed</code> first.
         </p>
       </main>
     );
   }
 
-  const rules = (await listRules(db, DEMO_MERCHANT_ID)) as RuleRow[];
+  const merchantId = merchantCtx.current.id;
+  const [rules, channels] = await Promise.all([
+    listRules(db, merchantId) as Promise<RuleRow[]>,
+    listChannels(db, merchantId),
+  ]);
   const { merchant, settings, categories } = config;
   const enabledCount = categories.filter((c) => c.enabled).length;
 
@@ -39,7 +51,10 @@ export default async function ConfigPage({
       className="mx-auto max-w-5xl p-6 text-zinc-900 dark:text-zinc-100"
     >
       <header className="mb-4">
-        <h1 className="text-2xl font-semibold">Merchant configuration</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 className="text-2xl font-semibold">Merchant configuration</h1>
+          <MerchantSwitcher context={merchantCtx} back="/config" />
+        </div>
         <p className="text-sm text-zinc-500">
           {merchant.name} · locale <code>{merchant.locale}</code> ·{" "}
           {merchant.rtl ? "RTL" : "LTR"} · {enabledCount}/{categories.length}{" "}
@@ -47,6 +62,20 @@ export default async function ConfigPage({
           <a className="underline" href="/simulator">
             test in the simulator →
           </a>
+        </p>
+        <p className="text-xs text-zinc-500">
+          {/* Which WhatsApp number reaches this merchant (SPEC §10). */}
+          WhatsApp number
+          {channels.length === 0
+            ? ": none linked — inbound messages cannot be routed here yet"
+            : `: ${channels
+                .map(
+                  (c) =>
+                    `${c.display_number ?? c.phone_number_id}${
+                      c.is_primary ? "" : " (secondary)"
+                    }`,
+                )
+                .join(", ")}`}
         </p>
       </header>
 

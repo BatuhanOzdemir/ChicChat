@@ -62,6 +62,18 @@ async function sim(
   } as Parameters<typeof runSimulatorAction>[1]);
 }
 
+/**
+ * Messages this run would have sent to one phone. The job sweeps every session
+ * the merchant has, so assertions scope to their own conversation rather than
+ * assuming the database holds nothing else (see docs/RETROFIT.md R6b).
+ */
+function sentTo(
+  response: Awaited<ReturnType<typeof runSimulatorAction>>,
+  phone: string,
+): OutboundMessage[] {
+  return response.outbound.filter((m) => m.to === phone);
+}
+
 beforeAll(async () => {
   await client.connect();
   execFileSync("node", ["scripts/seed.mjs"], {
@@ -105,18 +117,21 @@ describe("session inactivity (SPEC §11)", () => {
     expect(capturedCount).toBeGreaterThan(0);
 
     // Not yet idle enough.
-    expect((await sim("maintenance", phone)).outbound).toEqual([]);
+    expect(sentTo(await sim("maintenance", phone), phone)).toEqual([]);
 
     // Age past nudge_after_minutes (default 5) and run the job.
     await sim("time_travel", phone, { ageMinutes: 6 });
     const nudged = await sim("maintenance", phone);
-    const nudge = nudged.outbound[0];
+    const nudge = sentTo(nudged, phone)[0];
     if (nudge?.type !== "text") throw new Error("expected a nudge text");
     expect(nudge.text.body).toMatch(/pick up|left off/i);
-    expect(nudged.notice).toContain("nudged 1");
+    // The summary counts the whole sweep, so it can exceed one when other
+    // conversations are also idle; "exactly one for this session" is what the
+    // second run below proves.
+    expect(nudged.notice).toMatch(/nudged [1-9]/);
 
-    // Exactly one nudge: running again sends nothing.
-    expect((await sim("maintenance", phone)).outbound).toEqual([]);
+    // Exactly one nudge: running again sends nothing to this customer.
+    expect(sentTo(await sim("maintenance", phone), phone)).toEqual([]);
 
     // Progress survived the nudge, and the customer resumes where they were.
     const afterNudge = await sim("state", phone);
@@ -174,10 +189,12 @@ describe("session inactivity (SPEC §11)", () => {
     );
     await sim("message", slowPhone, { message: { kind: "text", value: "hi" } });
     await sim("time_travel", slowPhone, { ageMinutes: 10 });
-    expect((await sim("maintenance", slowPhone)).outbound).toEqual([]);
+    expect(sentTo(await sim("maintenance", slowPhone), slowPhone)).toEqual([]);
 
     await sim("time_travel", slowPhone, { ageMinutes: 55 });
-    expect((await sim("maintenance", slowPhone)).outbound).toHaveLength(1);
+    expect(sentTo(await sim("maintenance", slowPhone), slowPhone)).toHaveLength(
+      1,
+    );
   });
 });
 

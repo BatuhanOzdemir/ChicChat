@@ -8,9 +8,19 @@ import type { WhatsAppConfig } from "./config";
 
 export type Sender = (message: OutboundMessage) => Promise<void>;
 
-export function graphSender(config: WhatsAppConfig): Sender {
+/**
+ * `phoneNumberId` overrides the environment's number, so a reply goes out from
+ * the number the customer actually messaged (SPEC §10 multi-tenancy). The access
+ * token is still environment-level — per-merchant credentials arrive with
+ * deployment secrets (Step 7).
+ */
+export function graphSender(
+  config: WhatsAppConfig,
+  phoneNumberId?: string | null,
+): Sender {
+  const from = phoneNumberId ?? config.phoneNumberId;
   return async (message) => {
-    const url = `https://graph.facebook.com/${config.graphVersion}/${config.phoneNumberId}/messages`;
+    const url = `https://graph.facebook.com/${config.graphVersion}/${from}/messages`;
     const res = await fetch(url, {
       method: "POST",
       headers: {

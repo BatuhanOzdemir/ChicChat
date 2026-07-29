@@ -84,6 +84,26 @@ export function SimulatorClient({
     [merchantId, phone, push],
   );
 
+  /**
+   * Switching tenants starts a different conversation: the session, case and
+   * chat log belong to the merchant they came from, so showing them under
+   * another merchant's name would be a lie (Step 6). The DB-side session is
+   * left alone — the point of the switcher is that both can be mid-intake.
+   */
+  const changeMerchant = useCallback(
+    (next: string) => {
+      setMerchantId(next);
+      setTranscript([]);
+      setCompletedCase(null);
+      setError(null);
+      // `call` still closes over the previous id, so the new one is passed
+      // explicitly; this loads whatever session the new tenant already has for
+      // this phone, which is how interleaved conversations stay visible.
+      void call({ action: "state", merchantId: next });
+    },
+    [call],
+  );
+
   const send = useCallback(
     async (
       message: SimulatorMessageInput,
@@ -177,7 +197,7 @@ export function SimulatorClient({
           phone={phone}
           busy={busy}
           injectError={injectError}
-          onMerchantChange={setMerchantId}
+          onMerchantChange={changeMerchant}
           onPhoneChange={setPhone}
           onInjectChange={setInjectError}
           onSendPhoto={() =>
