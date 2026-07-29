@@ -303,6 +303,7 @@ describe("tenant scoping", () => {
       actionType: "route",
       targetQueue: "q",
       priority: null,
+      sortOrder: 1,
     });
     expect(rule.ok).toBe(false);
   });

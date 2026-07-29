@@ -471,17 +471,22 @@ async function seed(client) {
       );
     }
 
-    for (const rule of cat.rules) {
+    // Rules are first-match-wins, so their listed order is their precedence
+    // and has to be recorded explicitly (§3).
+    for (let r = 0; r < cat.rules.length; r++) {
+      const rule = cat.rules[r];
       await client.query(
         `insert into routing_rules
-           (category_id, condition, action_type, target_queue, priority, auto_resolve)
-         values ($1, $2, $3, $4, $5, false)`,
+           (category_id, condition, action_type, target_queue, priority,
+            sort_order, auto_resolve)
+         values ($1, $2, $3, $4, $5, $6, false)`,
         [
           categoryId,
           j(rule.condition),
           rule.action_type,
           rule.target_queue,
           rule.priority,
+          r + 1,
         ],
       );
     }

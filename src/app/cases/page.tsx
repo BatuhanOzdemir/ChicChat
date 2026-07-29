@@ -13,7 +13,15 @@ import {
   listErroredSessions,
   PAGE_SIZE,
 } from "@/db/case-queries";
-import { formatWhen, maskedPhone, Panel, Stat, StatusBadge } from "./ui";
+import {
+  formatWhen,
+  maskedPhone,
+  Panel,
+  PriorityBadge,
+  queueName,
+  Stat,
+  StatusBadge,
+} from "./ui";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +67,10 @@ export default async function CasesPage({
         <h1 className="text-2xl font-semibold">Cases</h1>
         <p className="text-sm text-zinc-500">
           {page.total} case(s) matching · last 30 days of counters ·{" "}
+          <Link className="underline" href="/console">
+            agent console
+          </Link>{" "}
+          ·{" "}
           <Link className="underline" href="/config">
             configuration
           </Link>{" "}
@@ -161,6 +173,15 @@ export default async function CasesPage({
               />
             </label>
             <label className="flex flex-col gap-1 text-xs text-zinc-500">
+              Queue
+              <input
+                className={field}
+                name="queue"
+                defaultValue={filters.queue ?? ""}
+                placeholder="returns_queue"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-zinc-500">
               Order number
               <input
                 className={field}
@@ -227,6 +248,7 @@ export default async function CasesPage({
                   <tr className="text-left text-xs uppercase text-zinc-500">
                     <th className="py-1 pe-3">When</th>
                     <th className="py-1 pe-3">Status</th>
+                    <th className="py-1 pe-3">Queue</th>
                     <th className="py-1 pe-3">Category</th>
                     <th className="py-1 pe-3">Order</th>
                     <th className="py-1 pe-3">Customer</th>
@@ -245,6 +267,12 @@ export default async function CasesPage({
                       </td>
                       <td className="py-1.5 pe-3">
                         <StatusBadge status={row.status} />
+                      </td>
+                      <td className="py-1.5 pe-3 whitespace-nowrap">
+                        <span className="font-mono text-xs">
+                          {queueName(row.queue)}
+                        </span>{" "}
+                        <PriorityBadge priority={row.priority} />
                       </td>
                       <td className="py-1.5 pe-3">
                         {row.category_label}

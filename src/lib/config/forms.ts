@@ -5,7 +5,10 @@
  * returns discriminated results, so every editor boundary is validated before
  * anything reaches the database — and the rules are unit-testable.
  */
+import { isPriority, PRIORITIES } from "../cases/workflow";
 import { isValidKey, slugifyKey } from "./keys";
+
+export { PRIORITIES };
 
 export type ParseResult<T> =
   | { ok: true; value: T }
@@ -217,6 +220,8 @@ export interface RuleInput {
   actionType: EditableActionType;
   targetQueue: string | null;
   priority: string | null;
+  /** Evaluation order: rules are first-match-wins, lowest first. */
+  sortOrder: number;
 }
 
 export function parseRule(values: FormValues): ParseResult<RuleInput> {
@@ -241,13 +246,28 @@ export function parseRule(values: FormValues): ParseResult<RuleInput> {
 
   const label = text(values, "label");
   const targetQueue = text(values, "target_queue");
+
+  // Priority reaches a case's queue ordering, so a typo here would quietly
+  // mis-sort real work — constrain it to the known set at the boundary.
   const priority = text(values, "priority");
+  if (priority !== "" && !isPriority(priority)) {
+    return {
+      ok: false,
+      error: `priority must be one of ${PRIORITIES.join("|")}`,
+    };
+  }
 
   if (
     (actionType === "route" || actionType === "escalate") &&
     targetQueue === ""
   ) {
     return { ok: false, error: `${actionType} needs a target queue` };
+  }
+
+  // Evaluation is first-match-wins, so this is the merchant's precedence.
+  const sortOrder = int(values, "sort_order", 0);
+  if (sortOrder === null) {
+    return { ok: false, error: "sort_order must be a non-negative number" };
   }
 
   return {
@@ -258,6 +278,7 @@ export function parseRule(values: FormValues): ParseResult<RuleInput> {
       actionType,
       targetQueue: targetQueue === "" ? null : targetQueue,
       priority: priority === "" ? null : priority,
+      sortOrder,
     },
   };
 }

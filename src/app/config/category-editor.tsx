@@ -10,7 +10,12 @@ import {
   saveCategory,
   saveField,
 } from "./actions";
-import { ACTION_TYPES, FIELD_TYPES, NORMALIZE_RULES } from "@/lib/config/forms";
+import {
+  ACTION_TYPES,
+  FIELD_TYPES,
+  NORMALIZE_RULES,
+  PRIORITIES,
+} from "@/lib/config/forms";
 import { dangerButton, Field, input, smallButton } from "./ui";
 
 export interface RuleRow {
@@ -21,6 +26,7 @@ export interface RuleRow {
   action_type: string;
   target_queue: string | null;
   priority: string | null;
+  sort_order: number;
 }
 
 /** One category: rename/reorder/disable/delete, plus its subcategories, fields and rules. */
@@ -253,11 +259,17 @@ export function CategoryEditor({
         {/* Routing rules */}
         <div>
           <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">
-            Routing rules
+            Routing rules{" "}
+            <span className="font-normal normal-case">
+              — evaluated top to bottom, first match wins
+            </span>
           </h3>
           <ul className="mb-2 space-y-1 text-sm">
             {rules.map((rule) => (
               <li key={rule.id} className="flex items-start gap-2">
+                <span className="w-6 shrink-0 text-xs text-zinc-500">
+                  #{rule.sort_order}
+                </span>
                 <div className="min-w-0">
                   <div>
                     {rule.label ?? rule.action_type}{" "}
@@ -285,6 +297,15 @@ export function CategoryEditor({
             <Field label="Rule name" width="w-40">
               <input className={input} name="label" />
             </Field>
+            <Field label="Order" width="w-16">
+              <input
+                className={input}
+                name="sort_order"
+                type="number"
+                min={0}
+                defaultValue={rules.length + 1}
+              />
+            </Field>
             <Field label="Condition (JSON)" width="w-72">
               <textarea
                 className={input}
@@ -306,7 +327,15 @@ export function CategoryEditor({
               <input className={input} name="target_queue" />
             </Field>
             <Field label="Priority" width="w-24">
-              <input className={input} name="priority" placeholder="high" />
+              {/* A dropdown, because priority drives the console's queue order
+                  and a typo would sort real work wrongly. */}
+              <select className={input} name="priority" defaultValue="normal">
+                {PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
             </Field>
             <button type="submit" className={smallButton}>
               Add rule

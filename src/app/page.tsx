@@ -15,6 +15,9 @@ export default function Home() {
           See <code>CLAUDE.md</code> for the build plan.
         </p>
         <div className="mx-auto mt-2 flex flex-wrap justify-center gap-2">
+          <Link href="/console" className={`${button} bg-violet-700`}>
+            Agent console →
+          </Link>
           <Link href="/cases" className={`${button} bg-sky-700`}>
             Cases →
           </Link>

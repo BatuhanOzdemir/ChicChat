@@ -13,11 +13,14 @@ step that is scheduled to resolve it.
 | Step 1 | R5 (dead `health.ts`), R6b (seed-test isolation) |
 | Step 2 | **R3, R4, R8, R9, R11, R12, R14, R15, R16, R17, R19** — all six HIGH boundary/reliability findings plus the medium ones in scope |
 | Step 3 | **R6** (config actions now validated + covered), **R10** (config boundary), **R18** (enum fields render as tappable lists), **R21** (field ordering via `sort_order`) |
+| Step 4 | **R6** (case views), **R10**, **R18**, **R21** — see the Step 4 report; intake duration recorded, analytics distinguish "no data" from zero |
+| Step 5 | **R22 (partly)** — agent console shipped, so §9 is no longer missing. Two defects found and fixed while building it: routing-rule precedence was decided by a random uuid (rules written in one transaction share `now()`), now an explicit `sort_order`; and append-only logs ordered by `now()` tie inside a transaction, now `clock_timestamp()` |
 
 Still open: R2 (`node:crypto` in `lib` — a decision, not a defect), R7 (fixture
 in `lib`), R13 (KVKK — settings and disclosure URL exist as of Step 3; retention
-enforcement and per-phone deletion remain, Step 4), R20 (multi-tenancy, Step 6),
-R22 (remaining v0.2 scope: case views, agent console, connector, Flow).
+enforcement and per-phone deletion remain, and the transcript added in Step 5
+falls under the same retention policy), R20 (multi-tenancy, Step 6), R22
+(remaining v0.2 scope: connector, Flow).
 
 Severity: **HIGH** = correctness/security risk in production · **MED** =
 standards violation with real consequences · **LOW** = hygiene.

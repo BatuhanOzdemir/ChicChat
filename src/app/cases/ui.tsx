@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 
 const STATUS_TONE: Record<string, string> = {
   open: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200",
+  in_progress:
+    "bg-indigo-100 text-indigo-900 dark:bg-indigo-900/60 dark:text-indigo-100",
   needs_info:
     "bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-100",
   handed_off: "bg-sky-100 text-sky-900 dark:bg-sky-900/60 dark:text-sky-100",
@@ -21,6 +23,26 @@ export function StatusBadge({ status }: { status: string }) {
       {status}
     </span>
   );
+}
+
+const PRIORITY_TONE: Record<string, string> = {
+  high: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
+  normal: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  low: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
+};
+
+export function PriorityBadge({ priority }: { priority: string }) {
+  const tone = PRIORITY_TONE[priority] ?? PRIORITY_TONE.normal;
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${tone}`}>
+      {priority}
+    </span>
+  );
+}
+
+/** A case with no matching routing rule belongs to no queue (SPEC §3). */
+export function queueName(queue: string | null): string {
+  return queue ?? "unrouted";
 }
 
 export function Panel({

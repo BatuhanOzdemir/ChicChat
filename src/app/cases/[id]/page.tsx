@@ -4,7 +4,14 @@ import { formatDuration } from "@/lib/cases/analytics";
 import { getDatabase } from "@/db/client";
 import { DEMO_MERCHANT_ID } from "@/db/config";
 import { getCaseDetail } from "@/db/case-queries";
-import { formatWhen, maskedPhone, Panel, StatusBadge } from "../ui";
+import {
+  formatWhen,
+  maskedPhone,
+  Panel,
+  PriorityBadge,
+  queueName,
+  StatusBadge,
+} from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -46,9 +53,13 @@ export default async function CaseDetailPage({
         <Link className="text-xs underline" href="/cases">
           ← all cases
         </Link>
-        <h1 className="mt-1 flex items-center gap-2 text-2xl font-semibold">
+        <h1 className="mt-1 flex flex-wrap items-center gap-2 text-2xl font-semibold">
           {detail.category_label}
           <StatusBadge status={detail.status} />
+          <PriorityBadge priority={detail.priority} />
+          <span className="font-mono text-xs font-normal text-zinc-500">
+            {queueName(detail.queue)}
+          </span>
         </h1>
         <p className="text-sm text-zinc-500">
           <code>{detail.category_key}</code>
@@ -60,7 +71,10 @@ export default async function CaseDetailPage({
           )}{" "}
           · customer {maskedPhone(detail.customer_wa_id)} · tier{" "}
           {detail.integration_tier} · {formatWhen(detail.created_at)} · intake
-          took {formatDuration(intakeSeconds)}
+          took {formatDuration(intakeSeconds)} ·{" "}
+          <Link className="underline" href={`/console/${detail.id}`}>
+            work on it in the agent console
+          </Link>
         </p>
       </header>
 

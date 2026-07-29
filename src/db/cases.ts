@@ -8,8 +8,22 @@
  * category, subcategory, normalized fields, selected items, photos.
  */
 import type { Database, Queryable } from "./database";
+import { linkMessagesToCase } from "./transcript";
 
 export type { Queryable };
+
+/**
+ * The routing outcome to record with the case (SPEC §3 → §9). Decided by the
+ * pure `lib/cases/routing`, passed in as one object so queue, priority, status
+ * and the explanation can never drift apart.
+ */
+export interface PersistCaseRouting {
+  queue: string | null;
+  priority: string;
+  status: string;
+  /** One line for the case timeline explaining the decision. */
+  note: string;
+}
 
 export interface PersistCaseInput {
   merchantId: string;
@@ -18,6 +32,7 @@ export interface PersistCaseInput {
   subcategoryKey?: string | null;
   integrationTier?: number;
   status?: string;
+  routing?: PersistCaseRouting;
   /** When the customer's first message of this intake arrived (SPEC §8 metrics). */
   intakeStartedAt?: Date | string | null;
   fields: { key: string; raw: string; normalized: string | null }[];
@@ -43,6 +58,9 @@ export interface HandoffPackage {
   subcategory: string | null;
   integration_tier: number;
   status: string;
+  /** Routing flags (SPEC §9): where this landed and how urgently. */
+  queue: string | null;
+  priority: string;
   customer_wa_id: string;
   /** field_key -> normalized value. */
   fields: Record<string, string | null>;
@@ -94,20 +112,31 @@ export async function persistCase(
       tx,
       `insert into cases
          (merchant_id, customer_wa_id, category_id, subcategory_id, status,
-          integration_tier, intake_started_at)
-       values ($1, $2, $3, $4, $5, $6, $7)
+          integration_tier, intake_started_at, queue, priority)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        returning id`,
       [
         input.merchantId,
         input.customerWaId,
         category.id,
         subcategoryId,
-        input.status ?? "open",
+        input.routing?.status ?? input.status ?? "open",
         input.integrationTier ?? 0,
         input.intakeStartedAt ?? null,
+        input.routing?.queue ?? null,
+        input.routing?.priority ?? "normal",
       ],
     );
     const caseId = created!.id;
+
+    // The routing decision is part of the case's history, not a side note.
+    if (input.routing) {
+      await tx.query(
+        `insert into case_events (case_id, kind, to_status, body, actor)
+         values ($1, 'routing', $2, $3, 'system')`,
+        [caseId, input.routing.status, input.routing.note],
+      );
+    }
 
     for (const field of input.fields) {
       await tx.query(
@@ -118,6 +147,9 @@ export async function persistCase(
         [caseId, field.key, field.raw, field.normalized],
       );
     }
+
+    // Whatever was said on the way here belongs to this case (SPEC §9).
+    await linkMessagesToCase(tx, input.merchantId, input.customerWaId, caseId);
 
     for (const item of input.items ?? []) {
       await tx.query(
@@ -148,9 +180,11 @@ export async function buildHandoff(
     customer_wa_id: string;
     category: string;
     subcategory: string | null;
+    queue: string | null;
+    priority: string;
   }>(
     db,
-    `select c.id, c.status, c.integration_tier, c.customer_wa_id,
+    `select c.id, c.status, c.integration_tier, c.customer_wa_id, c.queue, c.priority,
             cat.key as category, sub.key as subcategory
        from cases c
        join categories cat on cat.id = c.category_id
@@ -194,6 +228,8 @@ export async function buildHandoff(
     subcategory: header.subcategory,
     integration_tier: header.integration_tier,
     status: header.status,
+    queue: header.queue,
+    priority: header.priority,
     customer_wa_id: header.customer_wa_id,
     fields,
     photos,

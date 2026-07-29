@@ -5,7 +5,7 @@
  * summary. Respects WhatsApp's field-length caps.
  */
 import type { Prompt } from "../intake";
-import type { ListRow, OutboundMessage } from "./types";
+import type { InboundMessage, ListRow, OutboundMessage } from "./types";
 
 // WhatsApp caps: row title <= 24, description <= 72, button <= 20, header <= 60.
 const TITLE_MAX = 24;
@@ -80,6 +80,35 @@ export function genericErrorMessage(to: string): OutboundMessage {
     to,
     "Sorry — something went wrong on our side. An agent will follow up with you shortly.",
   );
+}
+
+/**
+ * Render a message as the one line an agent reads in the transcript (SPEC §9).
+ * A List Message becomes its question plus the options offered, because "which
+ * choices did the customer actually see?" is the question agents ask most.
+ */
+export function outboundSummary(message: OutboundMessage): string {
+  if (message.type === "text") return message.text.body;
+
+  const { body, action } = message.interactive;
+  const options = action.sections
+    .flatMap((section) => section.rows.map((row) => row.title))
+    .join(" · ");
+  return options === "" ? body.text : `${body.text}\n[${options}]`;
+}
+
+/** The same, for what the customer sent. */
+export function inboundSummary(message: InboundMessage): string {
+  switch (message.kind) {
+    case "interactive":
+      return `tapped "${message.reply}"`;
+    case "image":
+      return `sent a photo (${message.mediaId ?? message.reply})`;
+    case "flow":
+      return `submitted a form: ${message.reply}`;
+    default:
+      return message.reply;
+  }
 }
 
 export function promptToMessage(prompt: Prompt, to: string): OutboundMessage {

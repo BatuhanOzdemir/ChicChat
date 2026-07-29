@@ -245,8 +245,9 @@ export async function createRule(
   }
   const { rows } = await db.query(
     `insert into routing_rules
-       (category_id, label, condition, action_type, target_queue, priority, auto_resolve)
-     values ($1, $2, $3, $4, $5, $6, false) returning id`,
+       (category_id, label, condition, action_type, target_queue, priority,
+        sort_order, auto_resolve)
+     values ($1, $2, $3, $4, $5, $6, $7, false) returning id`,
     [
       categoryId,
       input.label,
@@ -254,6 +255,7 @@ export async function createRule(
       input.actionType,
       input.targetQueue,
       input.priority,
+      input.sortOrder,
     ],
   );
   return { ok: true, id: (rows[0] as { id: string }).id };
@@ -285,15 +287,18 @@ export async function listRules(
     action_type: string;
     target_queue: string | null;
     priority: string | null;
+    sort_order: number;
   }[]
 > {
   const { rows } = await db.query(
     `select rr.id, rr.category_id, rr.label, rr.condition, rr.action_type,
-            rr.target_queue, rr.priority
+            rr.target_queue, rr.priority, rr.sort_order
        from routing_rules rr
        join categories c on c.id = rr.category_id
       where c.merchant_id = $1
-      order by c.sort_order, rr.created_at`,
+      -- Same order the engine evaluates them in, so the editor shows
+      -- precedence as it actually is (first match wins).
+      order by c.sort_order, rr.sort_order, rr.created_at, rr.id`,
     [merchantId],
   );
   return rows as Awaited<ReturnType<typeof listRules>>;

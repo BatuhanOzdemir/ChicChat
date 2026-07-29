@@ -8,12 +8,25 @@ describe("parseCaseFilters", () => {
       value: {
         status: null,
         categoryKey: null,
+        queue: null,
         from: null,
         to: null,
         orderNumber: null,
         page: 1,
       },
     });
+  });
+
+  it("accepts a queue, including the unrouted sentinel (SPEC §9)", () => {
+    const named = parseCaseFilters({ queue: "returns_queue" });
+    expect(named.ok && named.value.queue).toBe("returns_queue");
+    const unrouted = parseCaseFilters({ queue: "unrouted" });
+    expect(unrouted.ok && unrouted.value.queue).toBe("unrouted");
+  });
+
+  it("accepts the statuses the agent console adds", () => {
+    expect(parseCaseFilters({ status: "in_progress" }).ok).toBe(true);
+    expect(parseCaseFilters({ status: "closed" }).ok).toBe(true);
   });
 
   it("normalizes the order-number search so messy input still matches", () => {

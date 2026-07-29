@@ -132,6 +132,23 @@ describe("parseRule", () => {
     expect(r.ok && r.value.condition).toEqual({ all: [] });
   });
 
+  it("carries the evaluation order, since first match wins", () => {
+    const r = parseRule({ action_type: "auto_reply", sort_order: "3" });
+    expect(r.ok && r.value.sortOrder).toBe(3);
+    expect(parseRule({ action_type: "auto_reply", sort_order: "-1" })).toEqual({
+      ok: false,
+      error: "sort_order must be a non-negative number",
+    });
+  });
+
+  it("rejects a priority outside high|normal|low", () => {
+    const r = parseRule({ action_type: "auto_reply", priority: "urgent" });
+    expect(r).toEqual({
+      ok: false,
+      error: "priority must be one of high|normal|low",
+    });
+  });
+
   it("requires a queue for route/escalate and valid JSON", () => {
     expect(parseRule({ action_type: "route" })).toEqual({
       ok: false,

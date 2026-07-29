@@ -13,11 +13,12 @@
  */
 import { inactivityAction } from "@/lib/intake";
 import type { IntakeState } from "@/lib/intake";
-import { nudgeMessage } from "@/lib/whatsapp";
+import { nudgeMessage, outboundSummary } from "@/lib/whatsapp";
 import type { OutboundMessage } from "@/lib/whatsapp";
 import { persistCase } from "@/db/cases";
 import type { Database } from "@/db/database";
 import { deleteSession, setSessionStatus } from "@/db/sessions";
+import { recordMessage } from "@/db/transcript";
 import { logger as defaultLogger, type Logger } from "@/server/logging/logger";
 
 export interface MaintenanceDeps {
@@ -135,7 +136,16 @@ export async function runSessionMaintenance(
         row.customer_wa_id,
         "nudged",
       );
-      await deps.send(nudgeMessage(row.customer_wa_id));
+      const nudge = nudgeMessage(row.customer_wa_id);
+      await deps.send(nudge);
+      // The nudge is part of the conversation an agent later reads (SPEC §9).
+      await recordMessage(deps.db, {
+        merchantId: row.merchant_id,
+        customerWaId: row.customer_wa_id,
+        direction: "outbound",
+        kind: nudge.type,
+        body: outboundSummary(nudge),
+      });
       log.info("session_nudged", {
         merchantId: row.merchant_id,
         phone: row.customer_wa_id,

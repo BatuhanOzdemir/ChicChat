@@ -211,14 +211,12 @@ export async function loadMerchantConfig(
   return { merchant, settings, categories };
 }
 
-/** Build the Step 5 IntakeConfig from the DB — enabled categories only. */
-export async function buildIntakeConfig(
-  db: Queryable,
-  merchantId: string,
-): Promise<IntakeConfig> {
-  const config = await loadMerchantConfig(db, merchantId);
-  if (!config) throw new Error(`merchant not found: ${merchantId}`);
-
+/**
+ * The intake machine's view of an already-loaded config — enabled categories
+ * only. Separate from the load so a caller that also needs the settings (e.g.
+ * routing rules resolving `ref` values) does not query twice per message.
+ */
+export function toIntakeConfig(config: EditableMerchantConfig): IntakeConfig {
   return {
     orderIdRegex: config.settings.order_id_regex ?? undefined,
     categories: config.categories
@@ -239,6 +237,16 @@ export async function buildIntakeConfig(
         })),
       })),
   };
+}
+
+/** Load the merchant config and reduce it to the intake machine's view. */
+export async function buildIntakeConfig(
+  db: Queryable,
+  merchantId: string,
+): Promise<IntakeConfig> {
+  const config = await loadMerchantConfig(db, merchantId);
+  if (!config) throw new Error(`merchant not found: ${merchantId}`);
+  return toIntakeConfig(config);
 }
 
 // --- Mutations (each is a single-column edit used by the config UI) ---------

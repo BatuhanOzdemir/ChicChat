@@ -83,6 +83,10 @@ describe("Tier-0 intake -> persist -> handoff", () => {
       subcategory: "damaged",
       integration_tier: 0,
       status: "open",
+      // No routing decision was passed, so the case defaults to unrouted at
+      // normal priority — the handler supplies these from the rules (SPEC §3).
+      queue: null,
+      priority: "normal",
       customer_wa_id: "+905550000001",
       fields: expectedFields,
       photos: ["wamid.HBgMedia123"],

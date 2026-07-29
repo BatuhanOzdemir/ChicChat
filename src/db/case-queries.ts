@@ -6,7 +6,7 @@
  * Every query is merchant-scoped. Filters arrive already validated from
  * `lib/cases/filters`, and are always passed as bound parameters.
  */
-import type { CaseFilters } from "@/lib/cases/filters";
+import { UNROUTED_QUEUE, type CaseFilters } from "@/lib/cases/filters";
 import { median } from "@/lib/cases/analytics";
 import type { Queryable } from "./database";
 
@@ -15,6 +15,8 @@ export const PAGE_SIZE = 25;
 export interface CaseListRow {
   id: string;
   status: string;
+  priority: string;
+  queue: string | null;
   category_key: string;
   category_label: string;
   subcategory_key: string | null;
@@ -46,6 +48,8 @@ function whereClause(filters: CaseFilters): {
 
   if (filters.status) parts.push(`c.status = ${add(filters.status)}`);
   if (filters.categoryKey) parts.push(`cat.key = ${add(filters.categoryKey)}`);
+  if (filters.queue === UNROUTED_QUEUE) parts.push("c.queue is null");
+  else if (filters.queue) parts.push(`c.queue = ${add(filters.queue)}`);
   if (filters.from) parts.push(`c.created_at >= ${add(filters.from)}::date`);
   if (filters.to) {
     parts.push(`c.created_at < (${add(filters.to)}::date + interval '1 day')`);
@@ -70,7 +74,8 @@ export async function listCases(
   const offset = (filters.page - 1) * PAGE_SIZE;
 
   const { rows } = await db.query(
-    `select c.id, c.status, cat.key as category_key, cat.label as category_label,
+    `select c.id, c.status, c.priority, c.queue,
+            cat.key as category_key, cat.label as category_label,
             sub.key as subcategory_key, c.customer_wa_id, c.created_at,
             (select f.normalized_value from case_fields f
               where f.case_id = c.id and f.field_key = 'order_number') as order_number,
@@ -103,6 +108,8 @@ export async function listCases(
 export interface CaseDetail {
   id: string;
   status: string;
+  priority: string;
+  queue: string | null;
   integration_tier: number;
   customer_wa_id: string;
   category_key: string;
@@ -131,8 +138,8 @@ export async function getCaseDetail(
   caseId: string,
 ): Promise<CaseDetail | null> {
   const { rows } = await db.query(
-    `select c.id, c.status, c.integration_tier, c.customer_wa_id,
-            cat.key as category_key, cat.label as category_label,
+    `select c.id, c.status, c.priority, c.queue, c.integration_tier,
+            c.customer_wa_id, cat.key as category_key, cat.label as category_label,
             sub.key as subcategory_key, c.created_at, c.intake_started_at
        from cases c
        join categories cat on cat.id = c.category_id

@@ -7,20 +7,21 @@
  * so a typo shows up as a message instead of a surprising result set.
  */
 import { normalizeOrderNumber } from "../normalize";
+import { CASE_STATUSES, isCaseStatus, type CaseStatus } from "./workflow";
 
-export const CASE_STATUSES = [
-  "open",
-  "needs_info",
-  "handed_off",
-  "escalated",
-  "resolved",
-  "abandoned",
-] as const;
-export type CaseStatus = (typeof CASE_STATUSES)[number];
+// The lifecycle vocabulary lives in ./workflow; re-exported here because the
+// views import their filter types from one place.
+export { CASE_STATUSES };
+export type { CaseStatus };
+
+/** `?queue=unrouted` selects the cases no rule routed (SPEC §9). */
+export const UNROUTED_QUEUE = "unrouted";
 
 export interface CaseFilters {
   status: CaseStatus | null;
   categoryKey: string | null;
+  /** Queue name, or `UNROUTED_QUEUE` for "no queue". */
+  queue: string | null;
   /** Inclusive date bounds (YYYY-MM-DD), interpreted by the query as UTC days. */
   from: string | null;
   to: string | null;
@@ -48,7 +49,7 @@ export function parseCaseFilters(
   params: Record<string, string | string[] | undefined>,
 ): ParseResult<CaseFilters> {
   const status = pick(params, "status");
-  if (status !== "" && !CASE_STATUSES.includes(status as CaseStatus)) {
+  if (status !== "" && !isCaseStatus(status)) {
     return { ok: false, error: `unknown status "${status}"` };
   }
 
@@ -76,12 +77,14 @@ export function parseCaseFilters(
   }
 
   const categoryKey = pick(params, "category");
+  const queue = pick(params, "queue");
 
   return {
     ok: true,
     value: {
       status: status === "" ? null : (status as CaseStatus),
       categoryKey: categoryKey === "" ? null : categoryKey,
+      queue: queue === "" ? null : queue,
       from: from === "" ? null : from,
       to: to === "" ? null : to,
       orderNumber: orderNumber === "" ? null : orderNumber,

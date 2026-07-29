@@ -95,9 +95,23 @@ export function InspectorPanel({
           Persisted case
         </h3>
         {completedCase ? (
-          <pre className="max-h-72 overflow-auto rounded bg-zinc-950 p-2 text-[11px] leading-relaxed text-zinc-100">
-            {JSON.stringify(completedCase, null, 2)}
-          </pre>
+          <>
+            {/* Where the routing rules sent it (SPEC §3 → §9). */}
+            <Row label="queue" value={completedCase.queue ?? "unrouted"} />
+            <Row label="priority" value={completedCase.priority} />
+            <Row label="status" value={completedCase.status} />
+            <a
+              className="mb-2 mt-1 inline-block text-xs underline"
+              href={`/console/${completedCase.case_id}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              open in the agent console →
+            </a>
+            <pre className="max-h-72 overflow-auto rounded bg-zinc-950 p-2 text-[11px] leading-relaxed text-zinc-100">
+              {JSON.stringify(completedCase, null, 2)}
+            </pre>
+          </>
         ) : (
           <p className="text-xs text-zinc-500">
             Appears here when an intake completes.
