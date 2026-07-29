@@ -1,0 +1,44 @@
+# Triggers the inactivity job (SPEC §11) on the deployed instance.
+#
+# The nudge fires after `nudge_after_minutes` (default 5), so the sweep has to
+# run at least that often — more often than a free Vercel plan's once-a-day
+# cron allows, which is why this lives here instead of in vercel.json.
+#
+# Requires two repository secrets (Settings → Secrets and variables → Actions):
+#   MAINTENANCE_URL     https://<your-host>/api/maintenance/sessions
+#   MAINTENANCE_SECRET  the same value as the deployment's MAINTENANCE_SECRET
+#
+# Until those exist the job exits successfully without calling anything, so a
+# fresh clone does not produce failing scheduled runs.
+name: session maintenance
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub treats scheduled runs as best-effort and may delay
+    # them under load; the job is idempotent, so a late or doubled run is safe.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+# Never run two sweeps at once.
+concurrency:
+  group: session-maintenance
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call the maintenance endpoint
+        env:
+          URL: ${{ secrets.MAINTENANCE_URL }}
+          SECRET: ${{ secrets.MAINTENANCE_SECRET }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$SECRET" ]; then
+            echo "MAINTENANCE_URL / MAINTENANCE_SECRET are not configured yet — nothing to do."
+            exit 0
+          fi
+          # -f so an HTTP error fails the step; the response body is the summary.
+          curl -fsS -X POST "$URL" \
+            -H "Authorization: Bearer $SECRET" \
+            -w '\nHTTP %{http_code}\n'

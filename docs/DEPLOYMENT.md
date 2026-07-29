@@ -83,25 +83,49 @@ deploying, `GET /api/health` returns `{"ok":true,"database":"up","warnings":N}`.
 npx vercel deploy --prod
 ```
 
-Vercel detects Next.js; no build configuration is needed. `vercel.json` adds one
-scheduled job:
+Vercel detects Next.js; no build configuration is needed.
 
+## 3a. Scheduling the inactivity job
+
+The nudge fires after `nudge_after_minutes` (default 5), so the sweep must run at
+least that often. **A free Vercel plan only runs crons once a day**, which would
+effectively disable the nudge — so the schedule lives outside Vercel:
+
+`.github/workflows/maintenance.yml` calls the endpoint every 5 minutes. Add two
+repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `MAINTENANCE_URL` | `https://<host>/api/maintenance/sessions` |
+| `MAINTENANCE_SECRET` | the same value as the deployment's `MAINTENANCE_SECRET` |
+
+Without them the workflow exits successfully without calling anything. Any other
+scheduler works the same way — cron-job.org, an uptime monitor, a server crontab:
+
+```bash
+curl -fsS -X POST -H "Authorization: Bearer $MAINTENANCE_SECRET" https://<host>/api/maintenance/sessions
 ```
-*/5 * * * *  ->  /api/maintenance/sessions
+
+The endpoint also accepts `GET`, since many schedulers only send GET. It is
+idempotent: a late or doubled run cannot double-nudge, because the session is
+marked before the message is sent.
+
+<details>
+<summary>On a paid Vercel plan you can use its own cron instead</summary>
+
+Add `vercel.json`:
+
+```json
+{
+  "crons": [{ "path": "/api/maintenance/sessions", "schedule": "*/5 * * * *" }]
+}
 ```
 
-Five minutes matches the default `nudge_after_minutes`, because a nudge can never
-fire sooner than the sweep interval.
+Vercel supplies `CRON_SECRET` automatically; set it as an environment variable
+and the endpoint accepts it. Then delete the GitHub workflow so the job is not
+swept twice.
 
-> **Vercel Hobby plans only run crons once a day**, which effectively disables
-> the nudge (SPEC §11). Either use a paid plan or point any external scheduler at
-> the endpoint instead:
->
-> ```bash
-> curl -X POST -H "Authorization: Bearer $MAINTENANCE_SECRET" https://<host>/api/maintenance/sessions
-> ```
->
-> The endpoint accepts `GET` too, since most schedulers only send GET.
+</details>
 
 ---
 
