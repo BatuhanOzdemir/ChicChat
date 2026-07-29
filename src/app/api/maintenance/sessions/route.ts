@@ -2,8 +2,10 @@
  * Session maintenance endpoint (SPEC §11) — the cleanup job's trigger, meant to
  * be called on a schedule (cron / platform scheduler).
  *
- * Protected by a shared secret when `MAINTENANCE_SECRET` is set; in production
- * the secret is required.
+ * Protected by a shared secret when `MAINTENANCE_SECRET` or `CRON_SECRET` is
+ * set; in production a secret is required. Accepts GET as well as POST, because
+ * platform schedulers (Vercel Cron among them) invoke with GET and supply the
+ * bearer token themselves.
  */
 import { getDatabase } from "@/db/client";
 import { primaryChannel } from "@/db/merchants";
@@ -15,14 +17,22 @@ import { logger } from "@/server/logging/logger";
 export const dynamic = "force-dynamic";
 
 function authorized(req: Request): boolean {
-  const secret = process.env.MAINTENANCE_SECRET;
-  if (secret) {
-    return req.headers.get("authorization") === `Bearer ${secret}`;
+  // CRON_SECRET is the name the platform scheduler sets; MAINTENANCE_SECRET is
+  // for calling the job by hand. Either is sufficient.
+  const secrets = [
+    process.env.MAINTENANCE_SECRET,
+    process.env.CRON_SECRET,
+  ].filter((s): s is string => typeof s === "string" && s.trim() !== "");
+
+  if (secrets.length > 0) {
+    const header = req.headers.get("authorization") ?? "";
+    return secrets.some((secret) => header === `Bearer ${secret}`);
   }
+  // No secret configured: allowed locally, refused in production.
   return process.env.NODE_ENV !== "production";
 }
 
-export async function POST(req: Request): Promise<Response> {
+async function runMaintenance(req: Request): Promise<Response> {
   if (!authorized(req)) {
     logger.warn("webhook_rejected", { reason: "maintenance_unauthorized" });
     return Response.json({ error: "unauthorized" }, { status: 401 });
@@ -55,3 +65,7 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "maintenance failed" }, { status: 500 });
   }
 }
+
+export const POST = runMaintenance;
+/** Scheduled invocations arrive as GET. */
+export const GET = runMaintenance;

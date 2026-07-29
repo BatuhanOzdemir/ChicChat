@@ -196,6 +196,50 @@ describe("session inactivity (SPEC §11)", () => {
       1,
     );
   });
+
+  it("keeps sweeping when one conversation fails (Step 7)", async () => {
+    const { runSessionMaintenance } =
+      await import("../server/maintenance/sessions");
+    const { logger, lines } = recordingLogger();
+
+    // Two idle sessions; the first send explodes the way an expired WhatsApp
+    // token does. The job must still reach the second one.
+    const doomed = "905550000205";
+    const other = "905550000206";
+    for (const phone of [doomed, other]) {
+      await sim("message", phone, { message: { kind: "text", value: "hi" } });
+    }
+    await client.query(
+      `update intake_sessions set updated_at = now() - interval '30 minutes'
+        where merchant_id = $1 and customer_wa_id = any($2)`,
+      [DEMO_MERCHANT_ID, [doomed, other]],
+    );
+
+    const sent: string[] = [];
+    const summary = await runSessionMaintenance(
+      {
+        db,
+        logger,
+        send: async (_merchantId, message) => {
+          if (message.to === doomed) throw new Error("access token expired");
+          sent.push(message.to);
+        },
+      },
+      new Date(),
+      DEMO_MERCHANT_ID,
+    );
+
+    expect(summary.failed).toBeGreaterThanOrEqual(1);
+    expect(sent).toContain(other);
+    // The failure is visible rather than swallowed.
+    expect(
+      lines.some(
+        (l) =>
+          l.event === "unexpected_exception" &&
+          l.context?.during === "session_maintenance",
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("transactional persistence (SPEC §11, Handbook §6)", () => {

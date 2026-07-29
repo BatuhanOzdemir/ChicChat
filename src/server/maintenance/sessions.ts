@@ -36,6 +36,8 @@ export interface MaintenanceSummary {
   nudged: number;
   abandoned: number;
   deleted: number;
+  /** Sessions this run could not process; each one is logged. */
+  failed: number;
 }
 
 interface DueRow {
@@ -119,51 +121,80 @@ export async function runSessionMaintenance(
   merchantId?: string,
 ): Promise<MaintenanceSummary> {
   const log = deps.logger ?? defaultLogger;
-  const summary: MaintenanceSummary = { nudged: 0, abandoned: 0, deleted: 0 };
+  const summary: MaintenanceSummary = {
+    nudged: 0,
+    abandoned: 0,
+    deleted: 0,
+    failed: 0,
+  };
 
   for (const row of await loadCandidates(deps.db, merchantId)) {
-    const action = inactivityAction(
-      { status: row.status, updatedAt: new Date(row.updated_at) },
-      {
-        nudgeAfterMinutes: row.nudge_after_minutes ?? 5,
-        abandonAfterHours: row.abandon_after_hours ?? 24,
-      },
-      now,
-    );
-
-    if (action === "none") continue;
-
-    if (action === "nudge") {
-      // Mark first: a send failure must not leave room for a second nudge.
-      await setSessionStatus(
-        deps.db,
-        row.merchant_id,
-        row.customer_wa_id,
-        "nudged",
-      );
-      const nudge = nudgeMessage(row.customer_wa_id);
-      await deps.send(row.merchant_id, nudge);
-      // The nudge is part of the conversation an agent later reads (SPEC §9).
-      await recordMessage(deps.db, {
-        merchantId: row.merchant_id,
-        customerWaId: row.customer_wa_id,
-        direction: "outbound",
-        kind: nudge.type,
-        body: outboundSummary(nudge),
-      });
-      log.info("session_nudged", {
+    // One conversation must not take the sweep down with it. This job runs
+    // unattended across every tenant, so a single expired WhatsApp token or
+    // unreachable merchant would otherwise stop everyone else's nudges.
+    try {
+      await maintainSession(deps, row, now, summary, log);
+    } catch (err) {
+      summary.failed += 1;
+      log.error("unexpected_exception", err, {
         merchantId: row.merchant_id,
         phone: row.customer_wa_id,
         correlationId: `maintenance:${row.customer_wa_id}`,
+        during: "session_maintenance",
       });
-      summary.nudged += 1;
-      continue;
     }
-
-    const outcome = await abandonSession(deps, row, log);
-    if (outcome === "abandoned") summary.abandoned += 1;
-    else summary.deleted += 1;
   }
 
   return summary;
+}
+
+/** Nudge, abandon or leave alone — one session. Throws on failure. */
+async function maintainSession(
+  deps: MaintenanceDeps,
+  row: DueRow,
+  now: Date,
+  summary: MaintenanceSummary,
+  log: Logger,
+): Promise<void> {
+  const action = inactivityAction(
+    { status: row.status, updatedAt: new Date(row.updated_at) },
+    {
+      nudgeAfterMinutes: row.nudge_after_minutes ?? 5,
+      abandonAfterHours: row.abandon_after_hours ?? 24,
+    },
+    now,
+  );
+
+  if (action === "none") return;
+
+  if (action === "nudge") {
+    // Mark first: a send failure must not leave room for a second nudge.
+    await setSessionStatus(
+      deps.db,
+      row.merchant_id,
+      row.customer_wa_id,
+      "nudged",
+    );
+    const nudge = nudgeMessage(row.customer_wa_id);
+    await deps.send(row.merchant_id, nudge);
+    // The nudge is part of the conversation an agent later reads (SPEC §9).
+    await recordMessage(deps.db, {
+      merchantId: row.merchant_id,
+      customerWaId: row.customer_wa_id,
+      direction: "outbound",
+      kind: nudge.type,
+      body: outboundSummary(nudge),
+    });
+    log.info("session_nudged", {
+      merchantId: row.merchant_id,
+      phone: row.customer_wa_id,
+      correlationId: `maintenance:${row.customer_wa_id}`,
+    });
+    summary.nudged += 1;
+    return;
+  }
+
+  const outcome = await abandonSession(deps, row, log);
+  if (outcome === "abandoned") summary.abandoned += 1;
+  else summary.deleted += 1;
 }

@@ -98,7 +98,9 @@ export async function runSimulatorAction(
       sessionMeta: meta,
       notice:
         `maintenance: nudged ${summary.nudged}, abandoned ${summary.abandoned}, ` +
-        `deleted ${summary.deleted}`,
+        `deleted ${summary.deleted}` +
+        // Only mentioned when it happened, so a clean run stays quiet.
+        (summary.failed > 0 ? `, failed ${summary.failed}` : ""),
     };
   }
 

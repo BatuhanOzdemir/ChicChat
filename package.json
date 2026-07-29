@@ -17,6 +17,7 @@
     "db:stop": "supabase stop",
     "db:migrate": "supabase migration up",
     "db:reset": "supabase db reset",
+    "db:push": "supabase db push",
     "db:seed": "node --env-file-if-exists=.env.local scripts/seed.mjs"
   },
   "dependencies": {
