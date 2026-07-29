@@ -18,6 +18,8 @@ export interface PersistCaseInput {
   subcategoryKey?: string | null;
   integrationTier?: number;
   status?: string;
+  /** When the customer's first message of this intake arrived (SPEC §8 metrics). */
+  intakeStartedAt?: Date | string | null;
   fields: { key: string; raw: string; normalized: string | null }[];
   /** Selected line items (Tier 1+ picker). Empty in Tier 0. */
   items?: {
@@ -91,8 +93,9 @@ export async function persistCase(
     const created = await one<{ id: string }>(
       tx,
       `insert into cases
-         (merchant_id, customer_wa_id, category_id, subcategory_id, status, integration_tier)
-       values ($1, $2, $3, $4, $5, $6)
+         (merchant_id, customer_wa_id, category_id, subcategory_id, status,
+          integration_tier, intake_started_at)
+       values ($1, $2, $3, $4, $5, $6, $7)
        returning id`,
       [
         input.merchantId,
@@ -101,6 +104,7 @@ export async function persistCase(
         subcategoryId,
         input.status ?? "open",
         input.integrationTier ?? 0,
+        input.intakeStartedAt ?? null,
       ],
     );
     const caseId = created!.id;

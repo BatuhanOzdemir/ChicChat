@@ -37,6 +37,7 @@ interface DueRow {
   customer_wa_id: string;
   state: IntakeState;
   status: "active" | "nudged" | "errored";
+  created_at: string;
   updated_at: string;
   nudge_after_minutes: number | null;
   abandon_after_hours: number | null;
@@ -48,7 +49,8 @@ async function loadCandidates(
   merchantId?: string,
 ): Promise<DueRow[]> {
   const { rows } = await db.query(
-    `select s.merchant_id, s.customer_wa_id, s.state, s.status, s.updated_at,
+    `select s.merchant_id, s.customer_wa_id, s.state, s.status,
+            s.created_at, s.updated_at,
             c.nudge_after_minutes, c.abandon_after_hours
        from intake_sessions s
        left join merchant_config c on c.merchant_id = s.merchant_id
@@ -92,6 +94,7 @@ async function abandonSession(
       subcategoryKey: state.subcategoryKey ?? null,
       integrationTier: 0,
       status: "abandoned",
+      intakeStartedAt: row.created_at,
       fields,
     });
     await deleteSession(deps.db, row.merchant_id, row.customer_wa_id);

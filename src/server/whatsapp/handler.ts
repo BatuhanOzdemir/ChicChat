@@ -17,7 +17,7 @@ import { buildIntakeConfig } from "@/db/config";
 import { claimMessage } from "@/db/processed-messages";
 import {
   deleteSession,
-  loadSession,
+  loadSessionMeta,
   saveSession,
   setSessionStatus,
 } from "@/db/sessions";
@@ -46,7 +46,8 @@ async function process(
   inbound: InboundMessage,
 ): Promise<{ persistedCaseId: string | null; reply: OutboundMessage }> {
   const config = await buildIntakeConfig(db, merchantId);
-  const existing = await loadSession(db, merchantId, inbound.from);
+  const meta = await loadSessionMeta(db, merchantId, inbound.from);
+  const existing = meta?.state ?? null;
 
   // First contact shows the category list without consuming the greeting.
   const session =
@@ -63,6 +64,8 @@ async function process(
       categoryKey: structured.category,
       subcategoryKey: structured.subcategory,
       integrationTier: 0,
+      // Where the intake began, so the console can report how long it took.
+      intakeStartedAt: meta?.created_at ?? null,
       fields: structured.fields,
     });
     await deleteSession(db, merchantId, inbound.from);

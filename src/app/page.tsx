@@ -1,3 +1,8 @@
+import Link from "next/link";
+
+const button =
+  "rounded-full px-5 py-2 text-sm font-medium text-white hover:opacity-90";
+
 export default function Home() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 p-8 dark:bg-black">
@@ -7,22 +12,21 @@ export default function Home() {
           WhatsApp-native structured intake &amp; triage for fashion retailers.
         </p>
         <p className="text-sm text-zinc-500">
-          Phase A core is in place. See <code>CLAUDE.md</code> for the build
-          plan.
+          See <code>CLAUDE.md</code> for the build plan.
         </p>
         <div className="mx-auto mt-2 flex flex-wrap justify-center gap-2">
-          <a
-            href="/simulator"
-            className="rounded-full bg-emerald-700 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-600"
-          >
+          <Link href="/cases" className={`${button} bg-sky-700`}>
+            Cases →
+          </Link>
+          <Link href="/simulator" className={`${button} bg-emerald-700`}>
             Chat simulator →
-          </a>
-          <a
+          </Link>
+          <Link
             href="/config"
-            className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900"
+            className={`${button} bg-zinc-900 dark:bg-zinc-700`}
           >
             Merchant configuration →
-          </a>
+          </Link>
         </div>
       </main>
     </div>
