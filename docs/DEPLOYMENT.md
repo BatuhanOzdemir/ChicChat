@@ -46,10 +46,26 @@ npm run db:push
 DATABASE_URL='<pooler-uri>' npm run db:seed
 ```
 
-Take `<pooler-uri>` from Supabase → Project Settings → Database → Connection
-string → **Connection pooling** (port 6543), and append `?sslmode=require`. Use
-the pooler, not the direct 5432 URI: serverless functions open many short-lived
-connections and will exhaust a direct connection limit.
+Get `<pooler-uri>` from the **Connect** button in the dashboard's top bar (it is
+not under Project Settings): choose the **Transaction pooler** entry, port
+**6543**, and replace the `[YOUR-PASSWORD]` placeholder with the database
+password. Use the pooler, not the direct 5432 URI — serverless functions open many
+short-lived connections and would exhaust a direct connection limit.
+
+**Append `?uselibpqcompat=true&sslmode=require` to the URI.** Two traps:
+
+- Without SSL parameters the pooler happily accepts a **plaintext** connection,
+  so the password and every customer message would cross the internet in the
+  clear. Always verify: `client.connection.stream.encrypted` must be `true`.
+- A bare `?sslmode=require` **fails** with this version of `pg`, which treats
+  `require` as `verify-full` and then rejects Supabase's certificate chain. The
+  `uselibpqcompat=true` prefix restores libpq's meaning: encrypt, do not verify
+  the certificate authority.
+
+That gives encryption against eavesdropping but not against an active
+man-in-the-middle. To close that too, download the project's CA certificate from
+the dashboard, ship it with the deployment, and use
+`?sslmode=verify-full&sslrootcert=<path>`.
 
 `db:seed` is idempotent — re-running it is safe, and it re-links each merchant's
 WhatsApp number from the environment.
