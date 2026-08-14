@@ -30,6 +30,15 @@ and per-merchant permissions are v0.3.
 ## 1. Hosted Postgres (Supabase)
 
 1. Create a project. Keep the database password — it is in the connection URI.
+
+   **Pick the region nearest your merchants, and pick it correctly the first
+   time** — Supabase cannot move a project between regions, so changing your
+   mind means a new project, re-pushed migrations, a re-seed and a new
+   `DATABASE_URL` everywhere. Measured from Turkey: `ap-south-1` (Mumbai)
+   answers a trivial `select 1` in **~210 ms**, against ~2.5 ms for a local
+   container. Every page in the console runs several queries, and an intake
+   turn runs more, so the region is multiplied by every round trip.
+
 2. Link this repo to it and push the migrations:
 
 ```bash

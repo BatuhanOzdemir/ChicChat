@@ -17,6 +17,7 @@ step that is scheduled to resolve it.
 | Step 5 | **R22 (partly)** — agent console shipped, so §9 is no longer missing. Two defects found and fixed while building it: routing-rule precedence was decided by a random uuid (rules written in one transaction share `now()`), now an explicit `sort_order`; and append-only logs ordered by `now()` tie inside a transaction, now `clock_timestamp()` |
 
 | Step 6 | **R20** — the demo-merchant hardcode is gone: the webhook resolves its tenant from `phone_number_id`, the console from a merchant switcher, and every read/write path is scoped and tested against a second merchant. **R6b again**: the inactivity assertions scoped to their own conversation, since the sweep spans a merchant's whole session set |
+| Step 7 | **Console authentication** (deferred from Step 5) — a shared passcode over every operator surface, failing closed in production. Three defects found while deploying: one merchant's expired WhatsApp token aborted the *whole* inactivity sweep, now isolated per session with a `failed` count; the Supabase pooler accepted a **plaintext** connection when the URI carried no SSL parameters; and every operator surface was a navigational dead end (no link home, none sideways), now one shared nav bar over an `(app)` route group |
 
 Still open: R2 (`node:crypto` in `lib` — a decision, not a defect), R7 (fixture
 in `lib`), R13 (KVKK — settings and disclosure URL exist as of Step 3; retention
@@ -26,10 +27,15 @@ Flow).
 
 Deferred deliberately, with the reason: per-merchant WhatsApp **access tokens**
 (the environment still holds one token; the number to send *from* is already
-per-merchant) — deployment secrets, Step 7. Console **authentication**: the
-merchant switcher is a cookie, so anyone reaching the console can act as any
-tenant — also Step 7, and the reason the switcher validates its input against
-the real merchant list rather than trusting it.
+per-merchant) — still deferred, and only necessary when merchants bring their
+own Meta apps.
+
+Console **authentication** landed in Step 7 as a single shared passcode, which
+keeps case data off the open internet but does **not** separate operators: the
+merchant switcher is still a cookie, so anyone past the passcode can act as any
+tenant. That is why the switcher validates its input against the real merchant
+list rather than trusting it. Per-user identity and per-merchant permissions are
+v0.3.
 
 Severity: **HIGH** = correctness/security risk in production · **MED** =
 standards violation with real consequences · **LOW** = hygiene.
