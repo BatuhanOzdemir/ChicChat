@@ -23,6 +23,7 @@ import { primaryChannel, resolveMerchantByPhoneNumberId } from "./merchants";
 import { loadSessionMeta } from "./sessions";
 import { listRules } from "./taxonomy";
 import { listTranscript } from "./transcript";
+import { forgetFakeConversations } from "./test-isolation";
 import { parseCaseFilters, type CaseFilters } from "../lib/cases/filters";
 import { runSimulatorAction } from "../server/simulator/service";
 import type { SimulatorInputKind } from "../lib/simulator/protocol";
@@ -76,6 +77,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await client.query("begin");
+  // A hosted database keeps what earlier runs left behind (R6b).
+  await forgetFakeConversations(client);
 });
 afterEach(async () => {
   await client.query("rollback");

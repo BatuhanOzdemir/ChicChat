@@ -13,6 +13,7 @@ import { buildHandoff } from "./cases";
 import { clientDatabase } from "./database";
 import { DEMO_MERCHANT_ID } from "./config";
 import { loadSession } from "./sessions";
+import { forgetFakeConversations } from "./test-isolation";
 import { handleInbound } from "../server/whatsapp/handler";
 import type { InboundMessage, OutboundMessage } from "../lib/whatsapp";
 
@@ -71,6 +72,8 @@ afterAll(async () => {
 beforeEach(async () => {
   sent.length = 0;
   await client.query("begin");
+  // A hosted database keeps what earlier runs left behind (R6b).
+  await forgetFakeConversations(client);
 });
 afterEach(async () => {
   await client.query("rollback");

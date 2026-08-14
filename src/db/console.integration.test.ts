@@ -21,6 +21,7 @@ import {
   type QueueFilters,
 } from "./console";
 import { listTranscript } from "./transcript";
+import { forgetFakeConversations } from "./test-isolation";
 import { runSimulatorAction } from "../server/simulator/service";
 import type { SimulatorInputKind } from "../lib/simulator/protocol";
 
@@ -103,6 +104,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await client.query("begin");
+  // A hosted database keeps what earlier runs left behind (R6b).
+  await forgetFakeConversations(client);
 });
 afterEach(async () => {
   await client.query("rollback");

@@ -11,6 +11,7 @@ import {
 import { Client } from "pg";
 import { clientDatabase } from "./database";
 import { DEMO_MERCHANT_ID } from "./config";
+import { forgetFakeConversations } from "./test-isolation";
 import {
   caseCounters,
   getCaseDetail,
@@ -106,6 +107,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await client.query("begin");
+  // A hosted database keeps what earlier runs left behind (R6b).
+  await forgetFakeConversations(client);
 });
 afterEach(async () => {
   await client.query("rollback");

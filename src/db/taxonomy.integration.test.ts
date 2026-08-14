@@ -10,6 +10,7 @@ import {
 } from "vitest";
 import { Client } from "pg";
 import { clientDatabase } from "./database";
+import { forgetFakeConversations } from "./test-isolation";
 import {
   DEMO_MERCHANT_ID,
   buildIntakeConfig,
@@ -74,6 +75,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await client.query("begin");
+  // A hosted database keeps what earlier runs left behind (R6b).
+  await forgetFakeConversations(client);
 });
 afterEach(async () => {
   await client.query("rollback");

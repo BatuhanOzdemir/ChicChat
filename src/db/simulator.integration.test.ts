@@ -12,6 +12,7 @@ import { Client } from "pg";
 import { clientDatabase } from "./database";
 import { DEMO_MERCHANT_ID } from "./config";
 import { loadSession } from "./sessions";
+import { forgetFakeConversations } from "./test-isolation";
 import type { SimulatorInputKind } from "../lib/simulator/protocol";
 import {
   runSimulatorAction,
@@ -81,6 +82,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await client.query("begin");
+  // A hosted database keeps what earlier runs left behind (R6b).
+  await forgetFakeConversations(client);
 });
 afterEach(async () => {
   await client.query("rollback");
