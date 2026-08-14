@@ -86,15 +86,9 @@ export default async function ConsolePage({
           <h1 className="text-2xl font-semibold">Agent console</h1>
           <MerchantSwitcher context={merchant} back="/console" />
         </div>
+        {/* Cross-links to the other surfaces live in the nav bar. */}
         <p className="text-sm text-zinc-500">
-          {outstanding} case(s) outstanding ·{" "}
-          <Link className="underline" href="/cases">
-            merchant case views
-          </Link>{" "}
-          ·{" "}
-          <Link className="underline" href="/simulator">
-            simulator
-          </Link>
+          {outstanding} case(s) outstanding
         </p>
       </header>
 

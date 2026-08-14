@@ -58,10 +58,7 @@ export default async function ConfigPage({
         <p className="text-sm text-zinc-500">
           {merchant.name} · locale <code>{merchant.locale}</code> ·{" "}
           {merchant.rtl ? "RTL" : "LTR"} · {enabledCount}/{categories.length}{" "}
-          categories enabled ·{" "}
-          <a className="underline" href="/simulator">
-            test in the simulator →
-          </a>
+          categories enabled
         </p>
         <p className="text-xs text-zinc-500">
           {/* Which WhatsApp number reaches this merchant (SPEC §10). */}
