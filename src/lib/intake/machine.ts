@@ -245,7 +245,20 @@ export function startIntake(
     fields: {},
     pendingInitial: { ...initialFields },
   };
-  return proceed(config, state);
+  const session = proceed(config, state);
+
+  // The KVKK disclosure belongs to the first message of a *new conversation*
+  // (SPEC §12), which is precisely here and nowhere else. `categoryPrompt` is
+  // also how the machine recovers mid-conversation — after unrecognized input,
+  // or when the merchant disables the category a live session had chosen — and
+  // repeating the notice on every stumble would train customers to ignore it.
+  if (session.prompt.kind === "select_category" && config.kvkkUrl) {
+    return {
+      ...session,
+      prompt: { ...session.prompt, disclosure: config.kvkkUrl },
+    };
+  }
+  return session;
 }
 
 function pickCategory(

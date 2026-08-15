@@ -224,6 +224,7 @@ export async function loadMerchantConfig(
 export function toIntakeConfig(config: EditableMerchantConfig): IntakeConfig {
   return {
     orderIdRegex: config.settings.order_id_regex ?? undefined,
+    kvkkUrl: config.settings.kvkk_url ?? undefined,
     categories: config.categories
       .filter((c) => c.enabled)
       .map((c) => ({

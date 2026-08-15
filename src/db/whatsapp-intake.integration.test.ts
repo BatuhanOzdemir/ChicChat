@@ -79,6 +79,33 @@ afterEach(async () => {
   await client.query("rollback");
 });
 
+describe("KVKK disclosure on a live conversation (SPEC §12, Step 8)", () => {
+  it("opens with the merchant's notice, and does not repeat it", async () => {
+    const phone = "905550000077";
+    const say = (kind: InboundMessage["kind"], reply: string) =>
+      handleInbound(deps, DEMO_MERCHANT_ID, { ...inbound(kind, reply), from: phone });
+
+    await say("text", "merhaba");
+    const opening = sent[0];
+    if (opening.type !== "interactive") throw new Error("expected a list");
+    // The URL comes from this merchant's own merchant_config, not a constant.
+    const { rows } = await client.query(
+      `select kvkk_url from merchant_config where merchant_id = $1`,
+      [DEMO_MERCHANT_ID],
+    );
+    const url = (rows[0] as { kvkk_url: string | null }).kvkk_url;
+    expect(url).not.toBeNull();
+    expect(opening.interactive.body.text).toContain(url);
+
+    // Unrecognized input re-asks; that is a recovery, not a new conversation,
+    // so the notice must not appear again.
+    await say("text", "pizza please");
+    const reask = sent[1];
+    if (reask.type !== "interactive") throw new Error("expected a list");
+    expect(reask.interactive.body.text).not.toContain(url);
+  });
+});
+
 describe("inbound WhatsApp conversation -> Tier-0 case", () => {
   it("walks lists + fields and persists the case, then clears the session", async () => {
     // 1. greeting -> category List Message

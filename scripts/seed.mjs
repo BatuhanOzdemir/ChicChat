@@ -41,6 +41,10 @@ const MERCHANT = {
     refund_sla_days: 14,
     auto_approve_threshold: 50.0,
     order_id_regex: "^[A-Z0-9]{4,}$",
+    // Every new conversation opens by disclosing this (SPEC §12). Seeded so the
+    // demo merchants show the real behaviour; a merchant that clears it simply
+    // discloses nothing.
+    kvkk_url: "https://demo-apparel.example.com/kvkk",
   },
 };
 
@@ -372,6 +376,7 @@ const SECOND_MERCHANT = {
     refund_sla_days: 7,
     auto_approve_threshold: 250.0,
     order_id_regex: "^BM[0-9]{5,}$",
+    kvkk_url: "https://butikmoda.example.com/kvkk-aydinlatma-metni",
   },
 };
 
@@ -489,19 +494,21 @@ async function seedMerchant(client, merchant, taxonomy) {
   );
   await client.query(
     `insert into merchant_config
-       (merchant_id, return_window_days, refund_sla_days, auto_approve_threshold, order_id_regex)
-     values ($1, $2, $3, $4, $5)
+       (merchant_id, return_window_days, refund_sla_days, auto_approve_threshold, order_id_regex, kvkk_url)
+     values ($1, $2, $3, $4, $5, $6)
      on conflict (merchant_id) do update
        set return_window_days = excluded.return_window_days,
            refund_sla_days = excluded.refund_sla_days,
            auto_approve_threshold = excluded.auto_approve_threshold,
-           order_id_regex = excluded.order_id_regex`,
+           order_id_regex = excluded.order_id_regex,
+           kvkk_url = excluded.kvkk_url`,
     [
       merchant.id,
       merchant.config.return_window_days,
       merchant.config.refund_sla_days,
       merchant.config.auto_approve_threshold,
       merchant.config.order_id_regex,
+      merchant.config.kvkk_url,
     ],
   );
 

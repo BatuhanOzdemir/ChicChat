@@ -111,15 +111,30 @@ export function inboundSummary(message: InboundMessage): string {
   }
 }
 
+/**
+ * Prepend the KVKK notice to an opening message (SPEC §12).
+ *
+ * It rides on the message the customer was going to receive anyway rather than
+ * arriving as a separate one: a standalone legal notice before the greeting
+ * reads as spam, and on WhatsApp it would also cost an extra delivery.
+ */
+function withDisclosure(body: string, url: string | undefined): string {
+  if (!url) return body;
+  return `${body}\n\nBy continuing you agree to our handling of your personal data: ${url}`;
+}
+
 export function promptToMessage(prompt: Prompt, to: string): OutboundMessage {
   switch (prompt.kind) {
     case "select_category":
       return list(
         to,
         "How can we help?",
-        prompt.retry
-          ? "Sorry, I didn't catch that. Please pick a topic:"
-          : "Please pick a topic:",
+        withDisclosure(
+          prompt.retry
+            ? "Sorry, I didn't catch that. Please pick a topic:"
+            : "Please pick a topic:",
+          prompt.disclosure,
+        ),
         "Topics",
         prompt.options,
       );

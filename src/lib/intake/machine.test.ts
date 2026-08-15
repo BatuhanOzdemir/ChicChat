@@ -3,6 +3,36 @@ import { advance, startIntake } from "./machine";
 import { demoIntakeConfig as config } from "./fixtures";
 import type { IntakeSession } from "./types";
 
+describe("KVKK disclosure (SPEC §12)", () => {
+  const withKvkk = { ...config, kvkkUrl: "https://example.com/kvkk" };
+
+  it("discloses on the opening message of a new conversation", () => {
+    const start = startIntake(withKvkk);
+    expect(start.prompt).toMatchObject({
+      kind: "select_category",
+      disclosure: "https://example.com/kvkk",
+    });
+  });
+
+  it("does not repeat it when the machine re-asks", () => {
+    const start = startIntake(withKvkk);
+    // Unrecognized input sends the customer back to the category list; that is
+    // a recovery, not a new conversation.
+    const retry = advance(withKvkk, start.state, "pizza please");
+    expect(retry.prompt).toMatchObject({ kind: "select_category", retry: true });
+    expect(
+      (retry.prompt as { disclosure?: string }).disclosure,
+    ).toBeUndefined();
+  });
+
+  it("says nothing when the merchant has configured no URL", () => {
+    const start = startIntake(config);
+    expect(
+      (start.prompt as { disclosure?: string }).disclosure,
+    ).toBeUndefined();
+  });
+});
+
 describe("intake machine — selection", () => {
   it("re-prompts on an unrecognized category selection", () => {
     const start = startIntake(config);

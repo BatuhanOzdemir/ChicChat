@@ -35,6 +35,11 @@ export interface IntakeConfig {
   categories: CategoryDef[];
   /** merchant_config.order_id_regex — applied to order_number fields. */
   orderIdRegex?: string;
+  /**
+   * merchant_config.kvkk_url — where the customer can read how their data is
+   * handled. Opening a new conversation discloses it (SPEC §12).
+   */
+  kvkkUrl?: string;
 }
 
 export interface CapturedField {
@@ -69,7 +74,16 @@ export interface IntakeCase {
 }
 
 export type Prompt =
-  | { kind: "select_category"; options: Option[]; retry: boolean }
+  | {
+      kind: "select_category";
+      options: Option[];
+      retry: boolean;
+      /**
+       * KVKK disclosure URL, set only on the opening message of a new
+       * conversation — never on a retry or a mid-conversation recovery.
+       */
+      disclosure?: string;
+    }
   | {
       kind: "select_subcategory";
       category: string;

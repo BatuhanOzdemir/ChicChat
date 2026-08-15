@@ -4,6 +4,38 @@ import type { Prompt } from "../intake";
 
 const TO = "905551112233";
 
+describe("promptToMessage — KVKK disclosure (SPEC §12)", () => {
+  const options = [{ key: "return", label: "Return request" }];
+
+  it("carries the notice in the opening message rather than a separate one", () => {
+    const msg = promptToMessage(
+      {
+        kind: "select_category",
+        retry: false,
+        options,
+        disclosure: "https://example.com/kvkk",
+      },
+      TO,
+    );
+    if (msg.type !== "interactive") throw new Error("expected interactive");
+    const body = msg.interactive.body.text;
+    expect(body).toContain("https://example.com/kvkk");
+    // The greeting still has to read like a greeting.
+    expect(body).toContain("Please pick a topic:");
+    // WhatsApp caps an interactive body at 1024 characters.
+    expect(body.length).toBeLessThanOrEqual(1024);
+  });
+
+  it("leaves the message untouched when there is no disclosure", () => {
+    const msg = promptToMessage(
+      { kind: "select_category", retry: false, options },
+      TO,
+    );
+    if (msg.type !== "interactive") throw new Error("expected interactive");
+    expect(msg.interactive.body.text).not.toMatch(/agree|personal data/i);
+  });
+});
+
 describe("promptToMessage", () => {
   it("renders a category prompt as an interactive List Message", () => {
     const prompt: Prompt = {
