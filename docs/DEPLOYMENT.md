@@ -31,13 +31,21 @@ and per-merchant permissions are v0.3.
 
 1. Create a project. Keep the database password — it is in the connection URI.
 
-   **Pick the region nearest your merchants, and pick it correctly the first
-   time** — Supabase cannot move a project between regions, so changing your
-   mind means a new project, re-pushed migrations, a re-seed and a new
-   `DATABASE_URL` everywhere. Measured from Turkey: `ap-south-1` (Mumbai)
-   answers a trivial `select 1` in **~210 ms**, against ~2.5 ms for a local
-   container. Every page in the console runs several queries, and an intake
-   turn runs more, so the region is multiplied by every round trip.
+   **Pick the region nearest your merchants.** Supabase cannot move a project
+   between regions, so changing your mind means a new project, re-pushed
+   migrations, a re-seed and a new `DATABASE_URL` everywhere. Region choice is
+   free on every plan; there is no reason to accept a distant default.
+
+   Measured from Turkey, on a trivial `select 1`:
+
+   | Region | Per query | Integration suite |
+   |---|---|---|
+   | local container | ~2.5 ms | 33 s |
+   | `eu-central-1` (Frankfurt) | ~44 ms | 4 min |
+   | `ap-south-1` (Mumbai) | ~210 ms | 16 min, with timeouts |
+
+   Every console page runs several queries and every intake turn runs more, so
+   the region is multiplied by each round trip — it is not a one-off cost.
 
 2. Link this repo to it and push the migrations:
 
@@ -179,21 +187,22 @@ The integration suite writes and rolls back real transactions, so point it at a
 database you do not mind touching — a second Supabase project, or a branch:
 
 ```bash
-DATABASE_URL='<pooler-uri>' npx vitest run --config vitest.integration.config.ts --testTimeout=180000
+DATABASE_URL='<pooler-uri>' npm run test:db
 ```
 
 It seeds before running. Never point it at a database serving real merchants.
+Against Frankfurt the suite passes in about four minutes, versus 33 seconds
+against a local container.
 
-Two things differ from a local run, both caused by distance:
+**From a distant region, add `--testTimeout=180000`.** The 30 s default per test
+is generous at 2 ms a query and far too tight at 210 ms: the heaviest tests
+drive two complete intakes — well over a hundred sequential round trips — and
+time out while being perfectly correct. The config keeps the 30 s default so a
+genuinely hung local test still fails fast, so raise it on the command line:
 
-- **Raise the timeout.** The default is 30 s per test, which is generous when a
-  query costs 2 ms and far too tight when it costs 210 ms. The heaviest tests
-  drive two complete intakes — well over a hundred sequential round trips — and
-  time out against a distant database while being perfectly correct. The
-  default is left alone so that a genuinely hung local test still fails fast.
-- **Expect it to take ~15–20 minutes** rather than ~30 seconds.
-
-`npm run test:db` keeps the 30 s default and is the right command locally.
+```bash
+DATABASE_URL='<pooler-uri>' npx vitest run --config vitest.integration.config.ts --testTimeout=180000
+```
 
 ---
 
