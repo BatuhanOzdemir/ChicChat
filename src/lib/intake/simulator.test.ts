@@ -14,7 +14,7 @@ describe("simulateIntake — Tier-0 return with messy inputs", () => {
     fields: {
       order_number: "  #tr-100 432 ",
       item_ref: "the blue slim shirt",
-      reason: "doesnt fit",
+      reason: "Wrong_Size",
       condition: "Unworn_Tags_On",
     },
   });
@@ -28,6 +28,8 @@ describe("simulateIntake — Tier-0 return with messy inputs", () => {
     expect(normalized(c, "order_number")).toBe("TR100432");
     expect(normalized(c, "item_ref")).toBe("the blue slim shirt");
     expect(normalized(c, "condition")).toBe("unworn_tags_on");
+    // `reason` is an enum now, so a tap is canonicalized like any other (SPEC §5).
+    expect(normalized(c, "reason")).toBe("wrong_size");
   });
 
   it("asks for each required field exactly once, in order", () => {
@@ -48,7 +50,7 @@ describe("simulateIntake — list selection by index and label", () => {
       fields: {
         order_number: "TR100432",
         item_ref: "shirt",
-        reason: "doesnt fit",
+        reason: "wrong_size",
         condition: "unworn_tags_on",
       },
     });
@@ -65,7 +67,7 @@ describe("simulateIntake — asks only for the gaps (§0.4)", () => {
       initialFields: { order_number: "#TR-100 432" },
       fields: {
         item_ref: "blue shirt",
-        reason: "changed my mind",
+        reason: "changed_mind",
         condition: "unworn_tags_on",
       },
     });

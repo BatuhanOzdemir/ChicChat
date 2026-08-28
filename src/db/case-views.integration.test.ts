@@ -89,7 +89,7 @@ async function completeIntake(
 const RETURN_ANSWERS = {
   order_number: { kind: "text" as const, value: "  #tr-100 432 " },
   item_ref: { kind: "text" as const, value: "blue shirt" },
-  reason: { kind: "text" as const, value: "does not fit" },
+  reason: { kind: "list" as const, value: "wrong_size" },
   condition: { kind: "list" as const, value: "unworn_tags_on" },
 };
 

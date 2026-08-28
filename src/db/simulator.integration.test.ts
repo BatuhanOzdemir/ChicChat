@@ -98,7 +98,7 @@ describe("three categories complete end-to-end in the simulator", () => {
       {
         order_number: { kind: "text", value: "  #tr-100 432 " },
         item_ref: { kind: "text", value: "blue slim fit shirt" },
-        reason: { kind: "text", value: "it doesn't fit" },
+        reason: { kind: "list", value: "wrong_size" },
         condition: { kind: "text", value: "unworn_tags_on" },
       },
     );
@@ -146,7 +146,7 @@ describe("three categories complete end-to-end in the simulator", () => {
           value: '{"item_ref":"Chino Trousers — Beige / 32"}',
         },
         desired_variant: { kind: "text", value: "34" },
-        reason: { kind: "text", value: "too tight" },
+        reason: { kind: "list", value: "wrong_size" },
       },
     );
 

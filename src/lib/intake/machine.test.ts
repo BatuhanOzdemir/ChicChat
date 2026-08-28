@@ -106,7 +106,14 @@ describe("intake machine — invalid field input is re-asked", () => {
     let s = toOrderNumberPrompt();
     s = advance(config, s.state, "TR100"); // order_number
     s = advance(config, s.state, "blue shirt"); // item_ref
-    s = advance(config, s.state, "changed my mind"); // reason (free-text enum)
+
+    // `reason` carries values, so it is a list too — it used to have none and
+    // silently degraded to a free-text question, storing whatever was typed.
+    expect(s.prompt).toMatchObject({
+      kind: "select_field",
+      field: { key: "reason" },
+    });
+    s = advance(config, s.state, "changed_mind");
 
     // `condition` has configured values, so it is offered as a list (SPEC §5).
     expect(s.prompt).toMatchObject({

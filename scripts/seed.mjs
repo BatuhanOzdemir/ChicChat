@@ -90,7 +90,23 @@ const TAXONOMY = [
     fields: [
       ["order_number", "string", true, null, "order_number"],
       ["item_ref", "ref", true, null, null],
-      ["reason", "enum", true, null, null],
+      // SPEC §5: an enum must be tappable, so it carries its own values. These
+      // are item-level reasons and deliberately overlap the subcategory list —
+      // the customer may pick any subcategory and still need to say why.
+      [
+        "reason",
+        "enum",
+        true,
+        [
+          "wrong_size",
+          "poor_quality",
+          "looks_different",
+          "changed_mind",
+          "arrived_late",
+          "other",
+        ],
+        null,
+      ],
       [
         "condition",
         "enum",
@@ -138,7 +154,19 @@ const TAXONOMY = [
       ["order_number", "string", true, null, "order_number"],
       ["item_ref", "ref", true, null, null],
       ["desired_variant", "enum", true, null, null], // catalog-driven; validated when connected
-      ["reason", "enum", true, null, null],
+      [
+        "reason",
+        "enum",
+        true,
+        [
+          "wrong_size",
+          "wrong_color",
+          "poor_quality",
+          "looks_different",
+          "other",
+        ],
+        null,
+      ],
     ],
     rules: [
       {

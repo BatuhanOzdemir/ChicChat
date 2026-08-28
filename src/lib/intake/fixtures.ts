@@ -24,7 +24,19 @@ export const demoIntakeConfig: IntakeConfig = {
           normalizeRule: "order_number",
         },
         { key: "item_ref", type: "ref", required: true },
-        { key: "reason", type: "enum", required: true, enumValues: null },
+        {
+          key: "reason",
+          type: "enum",
+          required: true,
+          enumValues: [
+            "wrong_size",
+            "poor_quality",
+            "looks_different",
+            "changed_mind",
+            "arrived_late",
+            "other",
+          ],
+        },
         {
           key: "condition",
           type: "enum",
