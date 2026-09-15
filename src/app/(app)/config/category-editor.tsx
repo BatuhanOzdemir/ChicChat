@@ -306,7 +306,34 @@ export function CategoryEditor({
                 defaultValue={rules.length + 1}
               />
             </Field>
-            <Field label="Condition (JSON)" width="w-72">
+            <Field label="Match field (optional)" width="w-48">
+              <input
+                className={input}
+                name="condition_field"
+                placeholder="reason"
+              />
+            </Field>
+            <Field label="Comparison" width="w-40">
+              <select className={input} name="condition_op">
+                <option value="eq">equals</option>
+                <option value="neq">does not equal</option>
+                <option value="gt">greater than</option>
+                <option value="lt">less than</option>
+                <option value="present">is present</option>
+                <option value="absent">is missing</option>
+              </select>
+            </Field>
+            <Field label="Match value" width="w-48">
+              <input
+                className={input}
+                name="condition_value"
+                placeholder="wrong_size"
+              />
+            </Field>
+            <Field
+              label="Advanced condition (JSON; used when Match field is empty)"
+              width="w-72"
+            >
               <textarea
                 className={input}
                 name="condition"

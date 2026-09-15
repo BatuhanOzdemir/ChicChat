@@ -3,7 +3,7 @@
  * carrying `merchant_id` and a correlation id (the WhatsApp message id), and
  * never carrying PII beyond a masked phone.
  */
-import { maskPhone } from "@/lib/logging/mask";
+import { maskPhone, redactLog } from "@/lib/logging/mask";
 
 /** The events the system is required to log. */
 export type LogEvent =
@@ -49,7 +49,7 @@ function emit(level: Level, event: LogEvent, context: LogContext = {}): void {
     ...rest,
   };
   // One line per event; stderr for error level so hosting platforms split them.
-  const serialized = JSON.stringify(line);
+  const serialized = JSON.stringify(redactLog(line));
   if (level === "error") console.error(serialized);
   else console.log(serialized);
 }

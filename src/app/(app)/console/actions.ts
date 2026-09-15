@@ -7,6 +7,7 @@ import { getDatabase } from "@/db/client";
 import { addCaseNote, transitionCase } from "@/db/console";
 import { currentMerchantId } from "@/server/merchant/current";
 import { logger } from "@/server/logging/logger";
+import { currentPrincipal } from "@/server/auth/current";
 
 /**
  * The two things an agent can do to a case (SPEC §9): move its status and leave
@@ -54,7 +55,8 @@ export async function changeStatus(formData: FormData): Promise<void> {
     note = parsed.value;
   }
 
-  const result = await transitionCase(db, merchantId, caseId, to, note);
+  const actor = (await currentPrincipal(db))?.username ?? "local-developer";
+  const result = await transitionCase(db, merchantId, caseId, to, note, actor);
   done(caseId, result.ok ? undefined : result.error, merchantId);
 }
 
@@ -68,6 +70,7 @@ export async function addNote(formData: FormData): Promise<void> {
   const parsed = parseNote(field(formData, "note"));
   if (!parsed.ok) done(caseId, parsed.error, merchantId);
 
-  const result = await addCaseNote(db, merchantId, caseId, parsed.value);
+  const actor = (await currentPrincipal(db))?.username ?? "local-developer";
+  const result = await addCaseNote(db, merchantId, caseId, parsed.value, actor);
   done(caseId, result.ok ? undefined : result.error, merchantId);
 }

@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDatabase } from "@/db/client";
-import { listMerchants } from "@/db/config";
+import { merchantContext } from "@/server/merchant/current";
 import { MERCHANT_COOKIE } from "@/server/merchant/current";
 import { logger } from "@/server/logging/logger";
 
@@ -25,7 +25,7 @@ export async function selectMerchant(formData: FormData): Promise<void> {
 
   // The id comes from a form, so it is checked against the real list rather
   // than trusted — an unknown id leaves the current selection alone.
-  const merchants = await listMerchants(getDatabase());
+  const merchants = (await merchantContext(getDatabase()))?.options ?? [];
   if (!merchants.some((m) => m.id === requested)) {
     logger.warn("validation_failed", {
       error: "unknown merchant in switcher",

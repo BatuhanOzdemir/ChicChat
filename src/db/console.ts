@@ -59,7 +59,8 @@ function queueConditions(filters: QueueFilters): {
   if (filters.queue === UNROUTED_QUEUE) parts.push("c.queue is null");
   else if (filters.queue) parts.push(`c.queue = ${add(filters.queue)}`);
 
-  if (filters.categoryKey) parts.push(`cat.key = ${add(filters.categoryKey)}`);
+  if (filters.categoryKey)
+    parts.push(`c.category_key_snapshot = ${add(filters.categoryKey)}`);
 
   if (filters.status) parts.push(`c.status = ${add(filters.status)}`);
   else parts.push(`c.status = any(${add([...UNRESOLVED_STATUSES])})`);
@@ -88,20 +89,18 @@ export async function listQueue(
 
   const { rows } = await db.query(
     `select c.id, c.status, c.priority, c.queue,
-            cat.key as category_key, cat.label as category_label,
-            sub.key as subcategory_key, c.customer_wa_id, c.created_at,
+            c.category_key_snapshot as category_key, c.category_label_snapshot as category_label,
+            c.subcategory_key_snapshot as subcategory_key, c.customer_wa_id, c.created_at,
             -- Whichever field the merchant normalizes as an order number, since
             -- tenants name it differently (Step 6).
             (select cf.normalized_value
                from case_fields cf
-               join field_defs fd
-                 on fd.category_id = c.category_id and fd.key = cf.field_key
-              where cf.case_id = c.id and fd.normalize_rule = 'order_number'
-              order by fd.sort_order limit 1) as order_number,
+              where cf.case_id = c.id and cf.normalize_rule_snapshot = 'order_number'
+              order by cf.sort_order_snapshot limit 1) as order_number,
             (select count(*)::int from case_events e
               where e.case_id = c.id and e.kind = 'note') as note_count
        from cases c
-       join categories cat on cat.id = c.category_id
+       left join categories cat on cat.id = c.category_id
        left join subcategories sub on sub.id = c.subcategory_id
       where ${sql}
       order by ${PRIORITY_ORDER}, c.created_at asc
@@ -179,6 +178,7 @@ export async function transitionCase(
   caseId: string,
   to: string,
   note?: string | null,
+  actor = "agent",
 ): Promise<ConsoleWriteResult> {
   return db.transaction(async (tx) => {
     const { rows } = await tx.query(
@@ -200,9 +200,9 @@ export async function transitionCase(
     );
 
     await tx.query(
-      `insert into case_events (case_id, kind, from_status, to_status, body)
-       values ($1, 'status_change', $2, $3, $4)`,
-      [caseId, plan.value.from, plan.value.to, note?.trim() || null],
+      `insert into case_events (case_id, kind, from_status, to_status, body, actor)
+       values ($1, 'status_change', $2, $3, $4, $5)`,
+      [caseId, plan.value.from, plan.value.to, note?.trim() || null, actor],
     );
 
     return { ok: true, value: { from: plan.value.from, to: plan.value.to } };
@@ -215,13 +215,14 @@ export async function addCaseNote(
   merchantId: string,
   caseId: string,
   body: string,
+  actor = "agent",
 ): Promise<NoteWriteResult> {
   const { rows } = await db.query(
-    `insert into case_events (case_id, kind, body)
-     select c.id, 'note', $3 from cases c
+    `insert into case_events (case_id, kind, body, actor)
+     select c.id, 'note', $3, $4 from cases c
       where c.id = $2 and c.merchant_id = $1
      returning id`,
-    [merchantId, caseId, body],
+    [merchantId, caseId, body, actor],
   );
   return rows.length === 0
     ? { ok: false, error: "case not found" }

@@ -2,8 +2,7 @@ import { safeNextPath } from "@/lib/auth/gate";
 import { signIn } from "./actions";
 
 /**
- * The console's only unauthenticated page (Step 7). A shared passcode, not a
- * user account — see `lib/auth/gate` for why that is the v0.2 scope.
+ * Named-account sign-in. Only opaque, server-validated session tokens reach cookies.
  */
 export const dynamic = "force-dynamic";
 
@@ -24,19 +23,28 @@ export default async function LoginPage({
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center p-6 text-zinc-900 dark:text-zinc-100">
       <h1 className="text-2xl font-semibold">ChicChat</h1>
       <p className="mt-1 text-sm text-zinc-500">
-        This console shows customer conversations, so it asks for the passcode.
+        Sign in to access your merchant conversations.
       </p>
 
       {failed && (
         <p className="mt-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-          That passcode did not match.
+          Sign-in failed. Check your credentials or try again later.
         </p>
       )}
 
       <form action={signIn} className="mt-4 flex flex-col gap-3">
         <input type="hidden" name="next" value={next} />
         <label className="flex flex-col gap-1 text-xs text-zinc-500">
-          Passcode
+          Username
+          <input
+            name="username"
+            autoComplete="username"
+            required
+            className="rounded border px-3 py-2"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-zinc-500">
+          Password
           <input
             className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             type="password"

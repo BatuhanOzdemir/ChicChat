@@ -3,17 +3,13 @@ import {
   constantTimeEqual,
   gateDecision,
   isOpenPath,
-  MIN_PASSCODE_LENGTH,
   safeNextPath,
 } from "./gate";
-
-const PASSCODE = "a-long-enough-passcode";
 
 function decide(overrides: Partial<Parameters<typeof gateDecision>[0]> = {}) {
   return gateDecision({
     pathname: "/cases",
-    cookie: undefined,
-    passcode: PASSCODE,
+    authenticated: false,
     isProduction: true,
     ...overrides,
   });
@@ -58,39 +54,22 @@ describe("open paths", () => {
 });
 
 describe("gateDecision", () => {
-  it("allows a request carrying the right passcode", () => {
-    expect(decide({ cookie: PASSCODE })).toEqual({ kind: "allow" });
+  it("requires a verified session in production", () => {
+    expect(decide().kind).toBe("login");
+    expect(decide({ authenticated: true }).kind).toBe("allow");
+    expect(decide({ allowDevelopmentAccess: true }).kind).toBe("login");
   });
-
-  it("sends a wrong or missing cookie to the login page, remembering the path", () => {
-    expect(decide({ pathname: "/console/xyz", cookie: "nope" })).toEqual({
-      kind: "login",
-      next: "/console/xyz",
-    });
+  it("allows explicitly enabled development access only outside production", () => {
+    expect(
+      decide({ isProduction: false, allowDevelopmentAccess: true }).kind,
+    ).toBe("allow");
+    expect(
+      decide({ isProduction: false, allowDevelopmentAccess: false }).kind,
+    ).toBe("login");
   });
-
-  it("refuses to serve anything in production without a passcode", () => {
-    const decision = decide({ passcode: undefined });
-    expect(decision.kind).toBe("unavailable");
-    if (decision.kind === "unavailable") {
-      expect(decision.reason).toContain("CONSOLE_PASSCODE");
-    }
-    // Fails closed for blank and whitespace-only values too.
-    expect(decide({ passcode: "   " }).kind).toBe("unavailable");
-  });
-
-  it("does not get in the way of local development", () => {
-    expect(decide({ passcode: undefined, isProduction: false })).toEqual({
-      kind: "allow",
-    });
-  });
-
-  it("rejects a passcode too short to be worth having", () => {
-    const decision = decide({ passcode: "short", cookie: "short" });
-    expect(decision.kind).toBe("unavailable");
-    if (decision.kind === "unavailable") {
-      expect(decision.reason).toContain(String(MIN_PASSCODE_LENGTH));
-    }
+  it("does not allow paths merely sharing an open endpoint prefix", () => {
+    expect(isOpenPath("/login-secret")).toBe(false);
+    expect(isOpenPath("/api/whatsapp/webhook-admin")).toBe(false);
   });
 });
 

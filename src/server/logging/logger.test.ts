@@ -11,6 +11,27 @@ afterEach(() => {
 });
 
 describe("structured logger (Handbook §8)", () => {
+  it("redacts phones and secrets in correlation IDs, nested context and error stacks", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    logger.error(
+      "unexpected_exception",
+      new Error("recipient +90 555 000 1234; Bearer fake-secret-token"),
+      {
+        phone: "905550001234",
+        correlationId: "maintenance:905550001234",
+        nested: { access_token: "do-not-log", recipient: "905550001234" },
+      },
+    );
+    const output = String(spy.mock.calls[0][0]);
+    for (const secret of [
+      "905550001234",
+      "+90 555 000 1234",
+      "fake-secret-token",
+      "do-not-log",
+    ])
+      expect(output).not.toContain(secret);
+    expect(output).toContain("1234");
+  });
   it("emits one JSON line carrying merchant id and correlation id", () => {
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     logger.info("case_persisted", {

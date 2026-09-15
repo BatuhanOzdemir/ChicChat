@@ -12,7 +12,8 @@ import type { IntakeState } from "@/lib/intake";
 import { buildInboundEnvelope } from "@/lib/simulator/envelope";
 import type { SimulatorRequest } from "@/lib/simulator/protocol";
 import { buildHandoff, type HandoffPackage } from "@/db/cases";
-import type { Database, Queryable } from "@/db/database";
+import { clientDatabase, type Database, type Queryable } from "@/db/database";
+import { lockConversation } from "@/db/conversation-lock";
 import {
   ageSession,
   deleteSession,
@@ -21,6 +22,7 @@ import {
 } from "@/db/sessions";
 import { handleInbound } from "@/server/whatsapp/handler";
 import { runSessionMaintenance } from "@/server/maintenance/sessions";
+import { deliverReplies } from "@/server/whatsapp/outbox";
 
 /** The simulator's own phone_number_id — never a real Meta one. */
 export const SIMULATOR_PHONE_NUMBER_ID = "SIMULATOR";
@@ -69,10 +71,63 @@ export async function runSimulatorAction(
   db: Database,
   request: SimulatorRequest,
 ): Promise<SimulatorResponse> {
+  return db.transaction(async (tx) => {
+    await lockConversation(tx, request.merchantId, request.phone);
+    const { rows } = await tx.query(
+      `select 1 from intake_sessions where merchant_id=$1 and customer_wa_id=$2 and delivery_channel='whatsapp'
+      union all select 1 from message_inbox where merchant_id=$1 and customer_wa_id=$2 limit 1`,
+      [request.merchantId, request.phone],
+    );
+    if (rows.length)
+      return {
+        ...emptyResponse(),
+        error:
+          "This number has real WhatsApp activity. Choose a different fake phone.",
+      };
+    return runAction(clientDatabase(tx), request);
+  });
+}
+
+async function runAction(
+  db: Database,
+  request: SimulatorRequest,
+): Promise<SimulatorResponse> {
   const { merchantId, phone } = request;
+
+  if (request.action === "retry_delivery") {
+    const outbound: OutboundMessage[] = [];
+    const result = await deliverReplies(
+      db,
+      merchantId,
+      phone,
+      async (m) => {
+        outbound.push(m);
+      },
+      "simulator",
+      true,
+    );
+    const { state, meta } = await readSession(db, merchantId, phone);
+    return {
+      ...emptyResponse(),
+      outbound,
+      session: state,
+      sessionMeta: meta,
+      notice: `Retried delivery: ${result.sent} sent`,
+    };
+  }
 
   if (request.action === "reset") {
     await deleteSession(db, merchantId, phone);
+    for (const table of [
+      "conversation_messages",
+      "conversation_media",
+      "message_outbox",
+    ]) {
+      await db.query(
+        `delete from ${table} where merchant_id=$1 and customer_wa_id=$2 and case_id is null`,
+        [merchantId, phone],
+      );
+    }
     return emptyResponse();
   }
 
@@ -89,6 +144,8 @@ export async function runSimulatorAction(
       },
       new Date(),
       merchantId,
+      "simulator",
+      phone,
     );
     const { state, meta } = await readSession(db, merchantId, phone);
     return {
@@ -145,8 +202,8 @@ export async function runSimulatorAction(
   let sendsAttempted = 0;
   const recordingSend = async (msg: OutboundMessage): Promise<void> => {
     sendsAttempted += 1;
-    if (request.injectError === "handler_exception" && sendsAttempted === 1) {
-      throw new Error("injected simulator failure (handler_exception)");
+    if (request.injectError === "delivery_failure" && sendsAttempted === 1) {
+      throw new Error("injected delivery failure");
     }
     outbound.push(msg);
   };
@@ -157,7 +214,22 @@ export async function runSimulatorAction(
   for (const inbound of parseInbound(envelope)) {
     try {
       const result = await handleInbound(
-        { db, send: recordingSend },
+        {
+          db,
+          send: recordingSend,
+          channel: "simulator",
+          loadPhoto: async () => ({
+            mimeType: "image/png",
+            content: Buffer.from(
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l+0AAAAASUVORK5CYII=",
+              "base64",
+            ),
+          }),
+          beforeAdvance: () => {
+            if (request.injectError === "handler_exception")
+              throw new Error("injected handler exception");
+          },
+        },
         merchantId,
         inbound,
       );
@@ -168,7 +240,7 @@ export async function runSimulatorAction(
         error = "duplicate delivery skipped (idempotency)";
       } else if (result.failed) {
         error =
-          "processing failed — generic reply sent, session marked errored";
+          "processing failed or delivery is pending; inspect the session and retry pending delivery.";
       }
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);

@@ -1,13 +1,12 @@
 /**
  * Which merchant do the console pages act as? (Step 6 multi-tenancy seam.)
  *
- * There is no auth yet — that arrives with deployment (Step 7) — so the choice
- * lives in a cookie set by the switcher. The cookie is untrusted input like any
- * other: its value is only ever used after matching it against the merchants
- * that actually exist, never passed into a query directly. When it is missing or
- * stale, the first merchant by name is used, so a fresh browser still works.
+ * The selection cookie is only a preference. Every request resolves current
+ * account membership before selecting a tenant; a stale preference falls back
+ * to the first authorized merchant. Local development can explicitly bypass login.
  */
 import { cookies } from "next/headers";
+import { requirePrincipal } from "@/server/auth/current";
 import { listMerchants } from "@/db/config";
 import type { Queryable } from "@/db/database";
 
@@ -27,11 +26,14 @@ export interface MerchantContext {
   options: MerchantOption[];
 }
 
-/** Null only when the database has no merchants at all (unseeded). */
+/** Null when the current account has no available merchants. */
 export async function merchantContext(
   db: Queryable,
 ): Promise<MerchantContext | null> {
-  const options = await listMerchants(db);
+  const principal = await requirePrincipal(db);
+  const options = (await listMerchants(db)).filter(
+    (m) => !principal || principal.merchantIds.includes(m.id),
+  );
   if (options.length === 0) return null;
 
   const selected = (await cookies()).get(MERCHANT_COOKIE)?.value;

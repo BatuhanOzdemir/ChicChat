@@ -2,9 +2,9 @@
  * WhatsApp webhook (SPEC §§10, 12, 13).
  *
  *  GET  — Meta verification handshake.
- *  POST — verify the signature, acknowledge with 200 **immediately**, then
- *         process after the response (SPEC §10) so a slow conversation never
- *         makes Meta retry or throttle us.
+ *  POST — verify the signature, commit accepted messages to the inbox, then
+ *         acknowledge with 200 and process after the response. Failed storage
+ *         returns 503 so Meta can retry.
  */
 import { after } from "next/server";
 import {
@@ -16,10 +16,12 @@ import { getDatabase } from "@/db/client";
 import { resolveMerchantByPhoneNumberId } from "@/db/merchants";
 import { getWhatsAppConfig } from "@/server/whatsapp/config";
 import { graphSender } from "@/server/whatsapp/client";
-import { handleInbound } from "@/server/whatsapp/handler";
+import { acceptMessages, processInbox } from "@/server/whatsapp/inbox";
+import { primaryChannel } from "@/db/merchants";
 import { logger } from "@/server/logging/logger";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export function GET(req: Request): Response {
   const cfg = getWhatsAppConfig();
@@ -81,39 +83,37 @@ export async function POST(req: Request): Promise<Response> {
   const messages = parseInbound(body);
   logger.info("webhook_received", { messages: messages.length });
 
-  // Acknowledge first, work afterwards (SPEC §10).
-  after(async () => {
-    const db = getDatabase();
+  const db = getDatabase();
+  try {
+    const accepted = [];
     for (const inbound of messages) {
-      try {
-        // The number the message was sent to decides the tenant. An unknown
-        // number is dropped: replying from someone else's number, or filing the
-        // case against a guessed merchant, is worse than losing the message.
-        const channel = await resolveMerchantByPhoneNumberId(
-          db,
-          inbound.phoneNumberId,
-        );
-        if (!channel) {
-          logger.warn("webhook_rejected", {
-            reason: "unknown_phone_number_id",
-            correlationId: inbound.messageId,
-            phone_number_id: inbound.phoneNumberId,
-          });
-          continue;
-        }
-
-        // Reply from the merchant's own number, not the environment default.
-        const send = graphSender(cfg, channel.phoneNumberId);
-        await handleInbound({ db, send }, channel.merchantId, inbound);
-      } catch (err) {
-        // handleInbound already handles its own failures; this is belt-and-braces.
-        logger.error("unexpected_exception", err, {
+      const channel = await resolveMerchantByPhoneNumberId(
+        db,
+        inbound.phoneNumberId,
+      );
+      if (channel) accepted.push({ merchantId: channel.merchantId, inbound });
+      else
+        logger.warn("webhook_rejected", {
+          reason: "unknown_phone_number_id",
           correlationId: inbound.messageId,
-          phone: inbound.from,
         });
-      }
+    }
+    await acceptMessages(db, accepted);
+  } catch (err) {
+    logger.error("unexpected_exception", err, { during: "inbox_accept" });
+    // No durable copy exists: a 503 deliberately requests redelivery from Meta.
+    return new Response("temporarily unavailable", { status: 503 });
+  }
+  after(async () => {
+    try {
+      await processInbox(db, async (merchantId, message) => {
+        const channel = await primaryChannel(db, merchantId);
+        if (!channel) throw new Error("merchant channel unavailable");
+        await graphSender(cfg, channel.phoneNumberId)(message);
+      });
+    } catch (err) {
+      logger.error("unexpected_exception", err, { during: "inbox_worker" });
     }
   });
-
   return new Response("ok", { status: 200 });
 }

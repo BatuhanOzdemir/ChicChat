@@ -17,13 +17,14 @@ export async function claimMessage(
   db: Queryable,
   merchantId: string,
   messageId: string,
+  phone?: string,
 ): Promise<boolean> {
   const { rows } = await db.query(
-    `insert into processed_messages (merchant_id, message_id)
-     values ($1, $2)
+    `insert into processed_messages (merchant_id, message_id, customer_wa_id)
+     values ($1, $2, $3)
      on conflict (merchant_id, message_id) do nothing
      returning id`,
-    [merchantId, messageId],
+    [merchantId, messageId, phone ?? null],
   );
   return rows.length > 0;
 }

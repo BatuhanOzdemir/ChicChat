@@ -8,13 +8,33 @@
  * inbound conversations.
  */
 import { NextResponse, type NextRequest } from "next/server";
-import { gateDecision, PASSCODE_COOKIE, safeNextPath } from "@/lib/auth/gate";
+import {
+  gateDecision,
+  PASSCODE_COOKIE,
+  safeNextPath,
+  isOpenPath,
+} from "@/lib/auth/gate";
 
-export function middleware(req: NextRequest): NextResponse {
+import { getDatabase } from "@/db/client";
+import { sessionPrincipal } from "@/db/auth";
+
+export async function middleware(req: NextRequest): Promise<NextResponse> {
+  if (isOpenPath(req.nextUrl.pathname)) return NextResponse.next();
+  let authenticated = false;
+  try {
+    authenticated = !!(await sessionPrincipal(
+      getDatabase(),
+      req.cookies.get(PASSCODE_COOKIE)?.value,
+    ));
+  } catch {
+    return new NextResponse("Authentication temporarily unavailable", {
+      status: 503,
+    });
+  }
   const decision = gateDecision({
     pathname: req.nextUrl.pathname,
-    cookie: req.cookies.get(PASSCODE_COOKIE)?.value,
-    passcode: process.env.CONSOLE_PASSCODE,
+    authenticated,
+    allowDevelopmentAccess: process.env.CONSOLE_AUTH_REQUIRED !== "true",
     isProduction: process.env.NODE_ENV === "production",
   });
 
@@ -34,6 +54,7 @@ export function middleware(req: NextRequest): NextResponse {
 }
 
 export const config = {
+  runtime: "nodejs",
   // Everything except Next's own assets; the pure gate decides the rest, so the
   // open-path list has exactly one home.
   matcher: ["/((?!_next/static|_next/image).*)"],

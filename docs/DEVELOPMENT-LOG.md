@@ -1,5 +1,10 @@
 # DEVELOPMENT LOG — ChicChat, from first commit to the close of v0.2
 
+Historical record through August 2026. For subsequent reliability, privacy,
+authentication and simulator repairs, see `REPAIR-REPORT.md`. Statements below
+about shared passcodes, missing retention and pointer-only media describe the
+August implementation, not the repaired code.
+
 Written 2026-08-28, at the close of v0.2. This is the narrative record of how
 the product was built: what shipped in each step, what each verification gate
 actually caught, which decisions diverged from the spec and why, and what is

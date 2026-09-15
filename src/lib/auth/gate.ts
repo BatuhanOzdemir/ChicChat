@@ -2,14 +2,9 @@
  * Who may reach the console in a deployed instance (Step 7) — pure, so the
  * rules are unit-testable and the middleware stays a thin adapter.
  *
- * This is a **shared passcode**, not an identity system: it keeps case data —
- * customer phone numbers and conversation transcripts (SPEC §12) — off the open
- * internet. Per-user accounts and per-merchant permissions are a v0.3 concern;
- * until then the console is for the operator, and the merchant switcher decides
- * which tenant they are looking at.
- *
- * Fails **closed**: a production deployment with no passcode configured serves
- * nothing rather than everything.
+ * The caller verifies an opaque session token against the database. Production
+ * always requires authentication; server pages/actions additionally check tenant
+ * membership. The historical cookie name is retained, but shared secrets are invalid.
  */
 
 export const PASSCODE_COOKIE = "chicchat_console";
@@ -36,7 +31,9 @@ const OPEN_PREFIXES = [
 
 export function isOpenPath(pathname: string): boolean {
   return OPEN_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(prefix),
+    (prefix) =>
+      pathname === prefix ||
+      (prefix.endsWith("/") && pathname.startsWith(prefix)),
   );
 }
 
@@ -63,10 +60,10 @@ export type GateDecision =
 
 export interface GateInput {
   pathname: string;
-  /** Value of the passcode cookie, if the browser sent one. */
-  cookie: string | undefined;
-  /** The configured passcode; empty or missing means "not configured". */
-  passcode: string | undefined;
+  /** Whether the server verified a live session and enabled account. */
+  authenticated: boolean;
+  /** Explicit local-development bypass; ignored in production. */
+  allowDevelopmentAccess?: boolean;
   /** Production deployments must be gated; local development need not be. */
   isProduction: boolean;
 }
@@ -74,31 +71,11 @@ export interface GateInput {
 export function gateDecision(input: GateInput): GateDecision {
   if (isOpenPath(input.pathname)) return { kind: "allow" };
 
-  const passcode = (input.passcode ?? "").trim();
-
-  if (passcode === "") {
-    // Unset is normal locally and unacceptable in production.
-    return input.isProduction
-      ? {
-          kind: "unavailable",
-          reason:
-            "CONSOLE_PASSCODE is not set, so the console has no way to " +
-            "authenticate anyone and refuses to serve case data.",
-        }
-      : { kind: "allow" };
-  }
-
-  if (passcode.length < MIN_PASSCODE_LENGTH) {
-    return {
-      kind: "unavailable",
-      reason: `CONSOLE_PASSCODE must be at least ${MIN_PASSCODE_LENGTH} characters.`,
-    };
-  }
-
-  if (input.cookie && constantTimeEqual(input.cookie, passcode)) {
+  if (
+    input.authenticated ||
+    (!input.isProduction && input.allowDevelopmentAccess)
+  )
     return { kind: "allow" };
-  }
-
   return { kind: "login", next: input.pathname };
 }
 

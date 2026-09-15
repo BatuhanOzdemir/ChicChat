@@ -7,6 +7,7 @@ import { MerchantSwitcher } from "../merchant-switcher";
 import { addCategory } from "./actions";
 import { CategoryEditor, type RuleRow } from "./category-editor";
 import { PolicyForm } from "./policy-form";
+import { PrivacyForm } from "./privacy-form";
 import { Card, ErrorBanner, Field, input, primaryButton } from "./ui";
 
 // Reads the live DB on every request.
@@ -15,9 +16,9 @@ export const dynamic = "force-dynamic";
 export default async function ConfigPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; erased?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, erased } = await searchParams;
   const db = getDatabase();
   // `merchantCtx` is the tenancy selection; `merchant` below is that merchant's
   // own configuration row.
@@ -51,6 +52,8 @@ export default async function ConfigPage({
       className="mx-auto max-w-5xl p-6 text-zinc-900 dark:text-zinc-100"
     >
       <header className="mb-4">
+        {erased && <p role="status">Customer data deleted.</p>}
+        <PrivacyForm />
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h1 className="text-2xl font-semibold">Merchant configuration</h1>
           <MerchantSwitcher context={merchantCtx} back="/config" />

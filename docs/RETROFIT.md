@@ -1,5 +1,9 @@
 # RETROFIT — v0.1 code audited against the Engineering Handbook
 
+This is the historical v0.2 audit. The September review and repairs, including
+R13's deletion/retention work, are tracked in `REPAIR-PLAN.md` and
+`REPAIR-REPORT.md`. Old resolved labels are not substitutes for current tests.
+
 Audit performed at v0.2 Step 0 against commit `5faa804` (end of v0.1).
 **No fixes are applied in this document** — it is the findings list. Each item
 records the Handbook/SPEC rule, evidence (file:line), severity, and the v0.2

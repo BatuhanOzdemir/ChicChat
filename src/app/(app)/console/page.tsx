@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ageLabel, CASE_STATUSES } from "@/lib/cases/workflow";
 import { UNROUTED_QUEUE } from "@/lib/cases/filters";
 import { getDatabase } from "@/db/client";
-import { loadMerchantConfig } from "@/db/config";
+import { caseCategoryOptions } from "@/db/case-queries";
 import { listQueue, listQueues, type QueueFilters } from "@/db/console";
 import { merchantContext } from "@/server/merchant/current";
 import { MerchantSwitcher } from "../merchant-switcher";
@@ -62,10 +62,10 @@ export default async function ConsolePage({
   }
   const merchantId = merchant.current.id;
 
-  const [rows, queues, config] = await Promise.all([
+  const [rows, queues, categoryOptions] = await Promise.all([
     listQueue(db, merchantId, filters),
     listQueues(db, merchantId),
-    loadMerchantConfig(db, merchantId),
+    caseCategoryOptions(db, merchantId),
   ]);
 
   const outstanding = queues.reduce((sum, q) => sum + q.n, 0);
@@ -170,7 +170,7 @@ export default async function ConsolePage({
                 defaultValue={filters.categoryKey ?? ""}
               >
                 <option value="">any</option>
-                {(config?.categories ?? []).map((c) => (
+                {categoryOptions.map((c) => (
                   <option key={c.key} value={c.key}>
                     {c.label}
                   </option>

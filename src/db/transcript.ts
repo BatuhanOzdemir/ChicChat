@@ -69,6 +69,14 @@ export async function linkMessagesToCase(
   customerWaId: string,
   caseId: string,
 ): Promise<number> {
+  await db.query(
+    `update conversation_media set case_id=$3 where merchant_id=$1 and customer_wa_id=$2 and case_id is null`,
+    [merchantId, customerWaId, caseId],
+  );
+  await db.query(
+    `update message_outbox set case_id=$3 where merchant_id=$1 and customer_wa_id=$2 and case_id is null`,
+    [merchantId, customerWaId, caseId],
+  );
   const { rows } = await db.query(
     `update conversation_messages
         set case_id = $3

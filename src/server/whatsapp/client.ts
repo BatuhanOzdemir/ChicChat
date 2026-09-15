@@ -32,11 +32,10 @@ export function graphSender(
         recipient_type: "individual",
         ...message,
       }),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
-      throw new Error(
-        `WhatsApp send failed (${res.status}): ${await res.text()}`,
-      );
+      throw new Error(`WhatsApp send failed (HTTP ${res.status})`);
     }
   };
 }

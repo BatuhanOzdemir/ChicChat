@@ -12,9 +12,15 @@ import { primaryChannel } from "@/db/merchants";
 import { getWhatsAppConfig } from "@/server/whatsapp/config";
 import { graphSender } from "@/server/whatsapp/client";
 import { runSessionMaintenance } from "@/server/maintenance/sessions";
+import { enforceRetention } from "@/db/privacy";
+import { processInbox } from "@/server/whatsapp/inbox";
+import { retryReplies } from "@/server/whatsapp/outbox";
+import type { OutboundMessage } from "@/lib/whatsapp";
+import { constantTimeEqual } from "@/lib/auth/gate";
 import { logger } from "@/server/logging/logger";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 function authorized(req: Request): boolean {
   // CRON_SECRET is the name the platform scheduler sets; MAINTENANCE_SECRET is
@@ -26,7 +32,9 @@ function authorized(req: Request): boolean {
 
   if (secrets.length > 0) {
     const header = req.headers.get("authorization") ?? "";
-    return secrets.some((secret) => header === `Bearer ${secret}`);
+    return secrets.some((secret) =>
+      constantTimeEqual(header, `Bearer ${secret}`),
+    );
   }
   // No secret configured: allowed locally, refused in production.
   return process.env.NODE_ENV !== "production";
@@ -45,19 +53,35 @@ async function runMaintenance(req: Request): Promise<Response> {
     // number (SPEC §10). Senders are cached per run, not per session.
     const senders = new Map<string, ReturnType<typeof graphSender>>();
 
-    const summary = await runSessionMaintenance({
-      db,
-      send: async (merchantId, message) => {
-        let send = senders.get(merchantId);
-        if (!send) {
-          const channel = await primaryChannel(db, merchantId);
-          send = graphSender(cfg, channel?.phoneNumberId);
-          senders.set(merchantId, send);
-        }
-        await send(message);
+    const send = async (merchantId: string, message: OutboundMessage) => {
+      let sender = senders.get(merchantId);
+      if (!sender) {
+        const channel = await primaryChannel(db, merchantId);
+        if (!channel) throw new Error("merchant channel unavailable");
+        sender = graphSender(cfg, channel.phoneNumberId);
+        senders.set(merchantId, sender);
+      }
+      await sender(message);
+    };
+    const deletedRecords = await enforceRetention(db);
+    const inbox = await processInbox(db, send);
+    const sessions = await runSessionMaintenance(
+      { db, send },
+      new Date(),
+      undefined,
+      "whatsapp",
+    );
+    const replies = await retryReplies(db, send);
+    return Response.json(
+      {
+        ...sessions,
+        failed: sessions.failed + inbox.failed + replies.failed,
+        inbox,
+        replies,
+        deletedRecords,
       },
-    });
-    return Response.json(summary, { status: 200 });
+      { status: 200 },
+    );
   } catch (err) {
     logger.error("unexpected_exception", err, {
       during: "session_maintenance",

@@ -185,9 +185,9 @@ export async function buildHandoff(
   }>(
     db,
     `select c.id, c.status, c.integration_tier, c.customer_wa_id, c.queue, c.priority,
-            cat.key as category, sub.key as subcategory
+            c.category_key_snapshot as category, c.subcategory_key_snapshot as subcategory
        from cases c
-       join categories cat on cat.id = c.category_id
+       left join categories cat on cat.id = c.category_id
        left join subcategories sub on sub.id = c.subcategory_id
       where c.id = $1`,
     [caseId],
@@ -195,10 +195,9 @@ export async function buildHandoff(
   if (!header) throw new Error(`case not found: ${caseId}`);
 
   const { rows: fieldRows } = await db.query(
-    `select cf.field_key, cf.normalized_value, fd.type
+    `select cf.field_key, cf.normalized_value, cf.type_snapshot as type
        from case_fields cf
        join cases c on c.id = cf.case_id
-       left join field_defs fd on fd.category_id = c.category_id and fd.key = cf.field_key
       where cf.case_id = $1
       order by cf.field_key`,
     [caseId],

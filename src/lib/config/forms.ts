@@ -7,6 +7,7 @@
  */
 import { isPriority, PRIORITIES } from "../cases/workflow";
 import { isValidKey, slugifyKey } from "./keys";
+import { isCondition } from "../rules/validate";
 
 export { PRIORITIES };
 
@@ -233,15 +234,35 @@ export function parseRule(values: FormValues): ParseResult<RuleInput> {
     };
   }
 
-  const rawCondition = text(values, "condition") || '{"all":[]}';
+  let rawCondition = text(values, "condition") || '{"all":[]}';
+  const field = text(values, "condition_field");
+  if (field) {
+    const op = text(values, "condition_op") || "eq";
+    const raw = text(values, "condition_value");
+    let value: unknown = raw;
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      /* Plain text values need no JSON syntax. */
+    }
+    rawCondition = JSON.stringify({
+      field,
+      op,
+      ...(["present", "absent"].includes(op) ? {} : { value }),
+    });
+  }
   let condition: unknown;
   try {
     condition = JSON.parse(rawCondition);
   } catch {
     return { ok: false, error: "condition must be valid JSON" };
   }
-  if (typeof condition !== "object" || condition === null) {
-    return { ok: false, error: "condition must be a JSON object" };
+  if (!isCondition(condition)) {
+    return {
+      ok: false,
+      error:
+        "condition must be a valid, bounded rule tree (all, any, not, or field comparison)",
+    };
   }
 
   const label = text(values, "label");

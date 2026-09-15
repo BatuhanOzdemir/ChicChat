@@ -13,6 +13,7 @@ import type {
   RuleAction,
   RuleContext,
 } from "./types";
+import { isCondition } from "./validate";
 
 function isGroup(condition: Condition): condition is ConditionGroup {
   return (
@@ -78,12 +79,17 @@ export function evaluateCondition(
   condition: Condition,
   ctx: RuleContext,
 ): boolean {
+  if (!isCondition(condition)) return false;
+  return evaluateValidated(condition, ctx);
+}
+
+function evaluateValidated(condition: Condition, ctx: RuleContext): boolean {
   if (isGroup(condition)) {
     if (condition.all)
-      return condition.all.every((c) => evaluateCondition(c, ctx));
+      return condition.all.every((c) => evaluateValidated(c, ctx));
     if (condition.any)
-      return condition.any.some((c) => evaluateCondition(c, ctx));
-    if (condition.not) return !evaluateCondition(condition.not, ctx);
+      return condition.any.some((c) => evaluateValidated(c, ctx));
+    if (condition.not) return !evaluateValidated(condition.not, ctx);
     return true;
   }
   return evaluateComparison(condition, ctx);

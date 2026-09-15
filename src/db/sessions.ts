@@ -28,14 +28,15 @@ export async function saveSession(
   merchantId: string,
   customerWaId: string,
   state: IntakeState,
+  channel: "whatsapp" | "simulator" = "simulator",
 ): Promise<void> {
   await db.query(
-    `insert into intake_sessions (merchant_id, customer_wa_id, state)
-     values ($1, $2, $3)
+    `insert into intake_sessions (merchant_id, customer_wa_id, state, delivery_channel)
+     values ($1, $2, $3, $4)
      on conflict (merchant_id, customer_wa_id) do update
-       set state = excluded.state, updated_at = now(),
+       set state = excluded.state, updated_at = clock_timestamp(),
            status = 'active', last_error = null`,
-    [merchantId, customerWaId, JSON.stringify(state)],
+    [merchantId, customerWaId, JSON.stringify(state), channel],
   );
 }
 

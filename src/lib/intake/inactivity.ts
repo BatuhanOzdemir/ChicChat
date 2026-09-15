@@ -20,6 +20,7 @@ export interface SessionTiming {
   status: SessionLifecycle;
   /** Last customer activity. */
   updatedAt: Date;
+  nudgedAt?: Date | null;
 }
 
 export type InactivityAction = "none" | "nudge" | "abandon";
@@ -48,6 +49,7 @@ export function inactivityAction(
   // `errored` session is a merchant-console concern, not a nudge target.
   if (
     timing.status === "active" &&
+    !timing.nudgedAt &&
     idle >= thresholds.nudgeAfterMinutes * MINUTE
   ) {
     return "nudge";

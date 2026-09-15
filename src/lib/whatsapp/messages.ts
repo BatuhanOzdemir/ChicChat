@@ -36,6 +36,7 @@ function list(
   body: string,
   sectionTitle: string,
   options: { key: string; label: string }[],
+  locale = "en",
 ): OutboundMessage {
   return {
     to,
@@ -45,7 +46,7 @@ function list(
       header: { type: "text", text: truncate(header, 60) },
       body: { text: body },
       action: {
-        button: BUTTON,
+        button: locale.startsWith("tr") ? "Seçenekleri gör" : BUTTON,
         sections: [
           { title: truncate(sectionTitle, TITLE_MAX), rows: toRows(options) },
         ],
@@ -64,10 +65,12 @@ function text(to: string, body: string): OutboundMessage {
  * Kaldığınız yerden sürdürebiliriz."; copy here stays in the same language as
  * the rest of the bot's messages until localization is a first-class concern.
  */
-export function nudgeMessage(to: string): OutboundMessage {
+export function nudgeMessage(to: string, locale = "en"): OutboundMessage {
   return text(
     to,
-    "Still there? We can pick up right where you left off — your answers are saved.",
+    locale.startsWith("tr")
+      ? "Devam etmek ister misiniz? Kaldığınız yerden sürdürebiliriz."
+      : "Still there? We can pick up right where you left off — your answers are saved.",
   );
 }
 
@@ -75,10 +78,15 @@ export function nudgeMessage(to: string): OutboundMessage {
  * Generic customer-facing failure message (SPEC §13): never leaks diagnostics,
  * and promises a human follow-up because the case may be incomplete.
  */
-export function genericErrorMessage(to: string): OutboundMessage {
+export function genericErrorMessage(
+  to: string,
+  locale = "en",
+): OutboundMessage {
   return text(
     to,
-    "Sorry — something went wrong on our side. An agent will follow up with you shortly.",
+    locale.startsWith("tr")
+      ? "Üzgünüz, bir sorun oluştu. Bir temsilcimiz sizinle ilgilenecek."
+      : "Sorry — something went wrong on our side. An agent will follow up with you shortly.",
   );
 }
 
@@ -118,69 +126,102 @@ export function inboundSummary(message: InboundMessage): string {
  * arriving as a separate one: a standalone legal notice before the greeting
  * reads as spam, and on WhatsApp it would also cost an extra delivery.
  */
-function withDisclosure(body: string, url: string | undefined): string {
+function withDisclosure(
+  body: string,
+  url: string | undefined,
+  locale: string,
+): string {
   if (!url) return body;
-  return `${body}\n\nBy continuing you agree to our handling of your personal data: ${url}`;
+  return `${body}\n\n${locale.startsWith("tr") ? "Kişisel verilerinizin işlenmesine ilişkin aydınlatma metni:" : "Read how we handle your personal data:"} ${url}`;
 }
 
-export function promptToMessage(prompt: Prompt, to: string): OutboundMessage {
+export function promptToMessage(
+  prompt: Prompt,
+  to: string,
+  locale = "en",
+): OutboundMessage {
+  const tr = locale.startsWith("tr");
   switch (prompt.kind) {
     case "select_category":
       return list(
         to,
-        "How can we help?",
+        tr ? "Nasıl yardımcı olabiliriz?" : "How can we help?",
         withDisclosure(
           prompt.retry
-            ? "Sorry, I didn't catch that. Please pick a topic:"
-            : "Please pick a topic:",
+            ? tr
+              ? "Lütfen bir konu seçin:"
+              : "Sorry, I didn't catch that. Please pick a topic:"
+            : tr
+              ? "Lütfen bir konu seçin:"
+              : "Please pick a topic:",
           prompt.disclosure,
+          locale,
         ),
-        "Topics",
+        tr ? "Konular" : "Topics",
         prompt.options,
+        locale,
       );
 
     case "select_subcategory":
       return list(
         to,
-        "A bit more detail",
+        tr ? "Biraz daha ayrıntı" : "A bit more detail",
         prompt.retry
-          ? "Sorry, I didn't catch that. Please choose one:"
-          : "Which best describes it?",
-        "Options",
+          ? tr
+            ? "Lütfen bir seçenek seçin:"
+            : "Sorry, I didn't catch that. Please choose one:"
+          : tr
+            ? "Hangisi durumu en iyi açıklıyor?"
+            : "Which best describes it?",
+        tr ? "Seçenekler" : "Options",
         prompt.options,
+        locale,
       );
 
     case "select_field": {
       // Enum fields are always tappable (SPEC §5) — the customer never guesses.
-      const label = humanize(prompt.field.key);
+      const label = prompt.field.label ?? humanize(prompt.field.key);
       return list(
         to,
         label,
         prompt.retry
-          ? `Please choose one of the options for ${label}:`
-          : `Please choose your ${label}:`,
-        "Options",
+          ? tr
+            ? `${label} için bir seçenek seçin:`
+            : `Please choose one of the options for ${label}:`
+          : tr
+            ? `${label} seçin:`
+            : `Please choose your ${label}:`,
+        tr ? "Seçenekler" : "Options",
         prompt.options,
+        locale,
       );
     }
 
     case "request_field": {
-      const prefix = prompt.retry ? "Sorry, that didn't look right. " : "";
+      const prefix = prompt.retry
+        ? tr
+          ? "Lütfen tekrar deneyin. "
+          : "Sorry, that didn't look right. "
+        : "";
       const body =
         prompt.field.type === "media"
-          ? `${prefix}Please send a photo of the item.`
-          : `${prefix}Please share your ${humanize(prompt.field.key)}.`;
+          ? `${prefix}${tr ? "Lütfen ürünün fotoğrafını gönderin." : "Please send a photo of the item."}`
+          : `${prefix}${tr ? "Lütfen paylaşın:" : "Please share your"} ${prompt.field.label ?? humanize(prompt.field.key)}.`;
       return text(to, body);
     }
 
     case "complete": {
       const c = prompt.case;
       const lines = [
-        "✅ Thanks! We've logged your request:",
-        `• Category: ${c.category}${c.subcategory ? ` / ${c.subcategory}` : ""}`,
+        tr
+          ? "✅ Teşekkürler! Talebinizi kaydettik:"
+          : "✅ Thanks! We've logged your request:",
+        `• ${tr ? "Kategori" : "Category"}: ${c.category}${c.subcategory ? ` / ${c.subcategory}` : ""}`,
         ...c.fields.map((f) => `• ${humanize(f.key)}: ${f.normalized ?? "—"}`),
         "",
-        "An agent will follow up shortly.",
+        tr
+          ? "Bir temsilcimiz sizinle ilgilenecek."
+          : "An agent will follow up shortly.",
       ];
       return text(to, lines.join("\n"));
     }

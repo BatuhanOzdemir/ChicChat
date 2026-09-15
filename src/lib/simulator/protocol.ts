@@ -27,13 +27,17 @@ export interface SimulatorMessageInput {
  * message processing. `integration_down` is accepted and echoed but has nothing
  * to degrade until the first connector exists (Step 9) — see docs/RETROFIT.md.
  */
-export type SimulatorErrorInjection = "handler_exception" | "integration_down";
+export type SimulatorErrorInjection =
+  | "handler_exception"
+  | "integration_down"
+  | "delivery_failure";
 
 export type SimulatorAction =
   | "message"
   | "reset"
   | "time_travel"
   | "state"
+  | "retry_delivery"
   /** Run the inactivity maintenance job now (nudge / abandon, SPEC §11). */
   | "maintenance";
 
@@ -58,11 +62,13 @@ const ACTIONS: readonly SimulatorAction[] = [
   "time_travel",
   "state",
   "maintenance",
+  "retry_delivery",
 ];
 const KINDS: readonly SimulatorInputKind[] = ["text", "list", "photo", "flow"];
 const INJECTIONS: readonly SimulatorErrorInjection[] = [
   "handler_exception",
   "integration_down",
+  "delivery_failure",
 ];
 
 function str(value: unknown): string | null {

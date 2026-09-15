@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { caseCategoryOptions, deliveryIssues } from "@/db/case-queries";
 import { parseCaseFilters, CASE_STATUSES } from "@/lib/cases/filters";
 import {
   abandonmentRate,
@@ -6,7 +7,6 @@ import {
   formatPercent,
 } from "@/lib/cases/analytics";
 import { getDatabase } from "@/db/client";
-import { loadMerchantConfig } from "@/db/config";
 import { merchantContext } from "@/server/merchant/current";
 import { MerchantSwitcher } from "../merchant-switcher";
 import {
@@ -51,7 +51,6 @@ export default async function CasesPage({
     );
   }
   const merchantId = merchant.current.id;
-  const config = await loadMerchantConfig(db, merchantId);
 
   if (!parsed.ok) {
     return (
@@ -68,17 +67,41 @@ export default async function CasesPage({
   }
 
   const filters = parsed.value;
-  const [page, counters, errored] = await Promise.all([
-    listCases(db, merchantId, filters),
-    caseCounters(db, merchantId),
-    listErroredSessions(db, merchantId),
-  ]);
+  const [page, counters, errored, categoryOptions, pending] = await Promise.all(
+    [
+      listCases(db, merchantId, filters),
+      caseCounters(db, merchantId),
+      listErroredSessions(db, merchantId),
+      caseCategoryOptions(db, merchantId),
+      deliveryIssues(db, merchantId),
+    ],
+  );
 
   const pages = Math.max(1, Math.ceil(page.total / PAGE_SIZE));
 
   return (
     <main className="mx-auto max-w-6xl p-6 text-zinc-900 dark:text-zinc-100">
       <header className="mb-4">
+        {pending.length > 0 && (
+          <aside
+            className="mb-4 rounded border border-amber-400 p-3"
+            role="status"
+          >
+            <strong>{pending.length} replies awaiting delivery</strong>
+            <p className="text-sm">
+              Automatic retries are scheduled. Check WhatsApp credentials if
+              failures persist.
+            </p>
+            <ul>
+              {pending.map((item, index) => (
+                <li key={index} className="text-xs">
+                  Customer ending {item.customer_wa_id.slice(-4)} ·{" "}
+                  {item.attempts} attempts · {item.last_error}
+                </li>
+              ))}
+            </ul>
+          </aside>
+        )}
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h1 className="text-2xl font-semibold">Cases</h1>
           <MerchantSwitcher context={merchant} back="/cases" />
@@ -165,7 +188,7 @@ export default async function CasesPage({
                 defaultValue={filters.categoryKey ?? ""}
               >
                 <option value="">any</option>
-                {(config?.categories ?? []).map((c) => (
+                {categoryOptions.map((c) => (
                   <option key={c.key} value={c.key}>
                     {c.label}
                   </option>

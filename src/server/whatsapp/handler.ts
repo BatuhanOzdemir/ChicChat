@@ -1,10 +1,9 @@
 /**
  * Inbound WhatsApp orchestration (SPEC §§10–13).
  *
- * Responsibilities, in order: claim the message id so duplicate deliveries are
- * skipped (§11), advance the Step 5 intake machine, persist session or case
- * (atomically, §11), reply, and — if anything throws — send a generic message,
- * mark the session `errored`, and emit one correlated structured log line (§13).
+ * Lock the conversation; atomically claim the message, advance intake, persist
+ * state and queue its reply. Deliver only after commit. Processing errors mark
+ * the session errored; transport errors leave state intact and retain the reply.
  *
  * `db`, `send` and `logger` are injected so this is testable without Meta.
  */
@@ -17,7 +16,6 @@ import {
 import {
   genericErrorMessage,
   inboundSummary,
-  outboundSummary,
   promptToMessage,
 } from "@/lib/whatsapp";
 import type { InboundMessage, OutboundMessage } from "@/lib/whatsapp";
@@ -27,6 +25,12 @@ import { clientDatabase, type Database } from "@/db/database";
 import { loadMerchantConfig, toIntakeConfig } from "@/db/config";
 import { claimMessage } from "@/db/processed-messages";
 import { loadRoutingRules } from "@/db/routing";
+import { lockConversation } from "@/db/conversation-lock";
+import { enqueueReply, type DeliveryChannel } from "@/db/outbox";
+import { deliverReplies } from "./outbox";
+import { redactText } from "@/lib/logging/mask";
+import { savePhoto } from "@/db/media";
+import type { Photo } from "./media";
 import { recordMessage } from "@/db/transcript";
 import {
   deleteSession,
@@ -40,6 +44,10 @@ export interface IntakeDeps {
   db: Database;
   send: (message: OutboundMessage) => Promise<void>;
   logger?: Logger;
+  channel?: DeliveryChannel;
+  deferDelivery?: boolean;
+  beforeAdvance?: () => void;
+  loadPhoto?: (mediaId: string) => Promise<Photo>;
 }
 
 /** Outcome of handling one inbound message. */
@@ -82,6 +90,9 @@ async function process(
   db: Database,
   merchantId: string,
   inbound: InboundMessage,
+  channel: DeliveryChannel,
+  beforeAdvance?: () => void,
+  loadPhoto?: (mediaId: string) => Promise<Photo>,
 ): Promise<{
   persistedCaseId: string | null;
   routing: PersistCaseRouting | null;
@@ -106,6 +117,16 @@ async function process(
   });
 
   // First contact shows the category list without consuming the greeting.
+  beforeAdvance?.();
+  if (inbound.kind === "image" && inbound.mediaId && loadPhoto) {
+    await savePhoto(
+      db,
+      merchantId,
+      inbound.from,
+      inbound.mediaId,
+      await loadPhoto(inbound.mediaId),
+    );
+  }
   const session =
     existing == null
       ? startIntake(config)
@@ -131,123 +152,118 @@ async function process(
     });
     await deleteSession(db, merchantId, inbound.from);
   } else {
-    await saveSession(db, merchantId, inbound.from, session.state);
+    await saveSession(db, merchantId, inbound.from, session.state, channel);
   }
 
   return {
     persistedCaseId,
     routing,
-    reply: promptToMessage(session.prompt, inbound.from),
+    reply: promptToMessage(
+      session.prompt,
+      inbound.from,
+      merchantConfig.merchant.locale,
+    ),
   };
 }
 
-/**
- * Add a sent message to the transcript. Called after the send succeeds, so the
- * transcript is what the customer actually received — and best-effort, because
- * failing to log a delivered reply must not trigger the error path and send the
- * customer a second, contradictory message.
- */
-async function recordSent(
-  deps: IntakeDeps,
-  merchantId: string,
-  inbound: InboundMessage,
-  message: OutboundMessage,
-  caseId: string | null,
-  log: Logger,
-): Promise<void> {
-  try {
-    await recordMessage(deps.db, {
-      merchantId,
-      customerWaId: inbound.from,
-      caseId,
-      direction: "outbound",
-      kind: message.type,
-      body: outboundSummary(message),
-    });
-  } catch (err) {
-    log.error("unexpected_exception", err, {
-      merchantId,
-      correlationId: inbound.messageId,
-      phone: inbound.from,
-      during: "transcript_record",
-    });
-  }
-}
-
+/** Commit the state transition and its reply together; transport failures leave a retryable reply. */
 export async function handleInbound(
   deps: IntakeDeps,
   merchantId: string,
   inbound: InboundMessage,
 ): Promise<IntakeResult> {
   const log = deps.logger ?? defaultLogger;
+  const channel = deps.channel ?? "simulator";
   const context = {
     merchantId,
     correlationId: inbound.messageId,
     phone: inbound.from,
     kind: inbound.kind,
   };
-
+  let outcome: Awaited<ReturnType<typeof process>> | null;
   try {
-    // Claim and processing share one transaction, so a duplicate delivery is
-    // skipped (SPEC §11) while a *failed* message releases its claim and can be
-    // retried, and no partial case can survive a mid-write failure (§11/§13).
-    const outcome = await deps.db.transaction(async (tx) => {
-      const claimed = await claimMessage(tx, merchantId, inbound.messageId);
-      if (!claimed) return null;
-      return process(clientDatabase(tx), merchantId, inbound);
-    });
-
-    if (outcome === null) {
-      log.info("message_skipped_duplicate", context);
-      return { persistedCaseId: null, duplicate: true, failed: false };
-    }
-
-    const { persistedCaseId, routing, reply } = outcome;
-    if (persistedCaseId) {
-      log.info("case_persisted", { ...context, case_id: persistedCaseId });
-      if (routing) {
-        log.info("routing_decision", {
-          ...context,
-          case_id: persistedCaseId,
-          queue: routing.queue,
-          priority: routing.priority,
-          status: routing.status,
-        });
-      }
-    }
-    // Sent after commit: never promise the customer something uncommitted.
-    await deps.send(reply);
-    await recordSent(deps, merchantId, inbound, reply, persistedCaseId, log);
-    return { persistedCaseId, duplicate: false, failed: false };
-  } catch (err) {
-    // Handler boundary (SPEC §13): the conversation must never die silently.
-    log.error("unexpected_exception", err, context);
-    const message = err instanceof Error ? err.message : String(err);
-    try {
-      await setSessionStatus(
-        deps.db,
+    outcome = await deps.db.transaction(async (tx) => {
+      await lockConversation(tx, merchantId, inbound.from);
+      const claimed = await claimMessage(
+        tx,
         merchantId,
+        inbound.messageId,
         inbound.from,
-        "errored",
-        message,
       );
-      log.warn("session_errored", context);
-      const fallback = genericErrorMessage(inbound.from);
-      await deps.send(fallback);
-      // An agent reading this case needs to see what the customer sent and that
-      // we answered with the generic line (§9). Re-recording the inbound is a
-      // no-op unless its transaction rolled back.
-      await recordMessage(deps.db, {
+      if (!claimed) return null;
+      const result = await process(
+        clientDatabase(tx),
         merchantId,
-        customerWaId: inbound.from,
-        direction: "inbound",
-        kind: inbound.kind,
-        body: inboundSummary(inbound),
-        waMessageId: inbound.messageId,
+        inbound,
+        channel,
+        deps.beforeAdvance,
+        deps.loadPhoto,
+      );
+      await enqueueReply(tx, {
+        merchantId,
+        phone: inbound.from,
+        key: inbound.messageId,
+        channel,
+        message: result.reply,
+        caseId: result.persistedCaseId,
       });
-      await recordSent(deps, merchantId, inbound, fallback, null, log);
+      return result;
+    });
+  } catch (err) {
+    log.error("unexpected_exception", err, context);
+    try {
+      await deps.db.transaction(async (tx) => {
+        await lockConversation(tx, merchantId, inbound.from);
+        const merchantConfig = await loadMerchantConfig(tx, merchantId);
+        // First-contact failures also need a visible error session.
+        const existing = await loadSessionMeta(tx, merchantId, inbound.from);
+        if (!existing) {
+          const config = await loadMerchantConfig(tx, merchantId);
+          if (!config) throw new Error("merchant unavailable");
+          await saveSession(
+            tx,
+            merchantId,
+            inbound.from,
+            startIntake(toIntakeConfig(config)).state,
+            channel,
+          );
+        }
+        await setSessionStatus(
+          tx,
+          merchantId,
+          inbound.from,
+          "errored",
+          redactText(err instanceof Error ? err.message : "processing failed"),
+        );
+        await recordMessage(tx, {
+          merchantId,
+          customerWaId: inbound.from,
+          direction: "inbound",
+          kind: inbound.kind,
+          body: inboundSummary(inbound),
+          waMessageId: inbound.messageId,
+        });
+        await enqueueReply(tx, {
+          merchantId,
+          phone: inbound.from,
+          key: "error:" + inbound.messageId,
+          channel,
+          message: genericErrorMessage(
+            inbound.from,
+            merchantConfig?.merchant.locale,
+          ),
+        });
+      });
+      log.warn("session_errored", context);
+      if (!deps.deferDelivery)
+        await deliverReplies(
+          deps.db,
+          merchantId,
+          inbound.from,
+          deps.send,
+          channel,
+        );
     } catch (recoveryErr) {
-      // Nothing more we can do; make the failed recovery visible too.
       log.error("unexpected_exception", recoveryErr, {
         ...context,
         during: "error_recovery",
@@ -255,4 +271,39 @@ export async function handleInbound(
     }
     return { persistedCaseId: null, duplicate: false, failed: true };
   }
+  if (!outcome) log.info("message_skipped_duplicate", context);
+  if (outcome?.persistedCaseId) {
+    log.info("case_persisted", {
+      ...context,
+      case_id: outcome.persistedCaseId,
+    });
+    if (outcome.routing)
+      log.info("routing_decision", { ...context, ...outcome.routing });
+  }
+  let failed = false;
+  if (!deps.deferDelivery) {
+    try {
+      failed = (
+        await deliverReplies(
+          deps.db,
+          merchantId,
+          inbound.from,
+          deps.send,
+          channel,
+          outcome === null,
+        )
+      ).failed;
+    } catch (err) {
+      failed = true;
+      log.error("unexpected_exception", err, {
+        ...context,
+        during: "delivery",
+      });
+    }
+  }
+  return {
+    persistedCaseId: outcome?.persistedCaseId ?? null,
+    duplicate: outcome === null,
+    failed,
+  };
 }

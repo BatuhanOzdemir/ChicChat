@@ -236,6 +236,7 @@ export function toIntakeConfig(config: EditableMerchantConfig): IntakeConfig {
         })),
         fields: c.fields.map((f) => ({
           key: f.key,
+          label: f.label ?? undefined,
           type: f.type as FieldType,
           required: f.required,
           enumValues: f.enumValues,

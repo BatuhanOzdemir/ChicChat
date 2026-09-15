@@ -291,8 +291,11 @@ describe("unexpected-error path (SPEC §13)", () => {
       {
         db,
         logger,
-        send: async () => {
-          throw new Error("transport exploded");
+        beforeAdvance: () => {
+          throw new Error("machine exploded");
+        },
+        send: async (message) => {
+          outbound.push(message);
         },
       },
       DEMO_MERCHANT_ID,
@@ -306,10 +309,10 @@ describe("unexpected-error path (SPEC §13)", () => {
     );
 
     expect(result.failed).toBe(true);
-    expect(outbound).toEqual([]); // both sends failed, by construction
+    expect(outbound).toHaveLength(1);
 
     const exceptions = lines.filter((l) => l.event === "unexpected_exception");
-    expect(exceptions).toHaveLength(2); // the failure, then the failed recovery
+    expect(exceptions).toHaveLength(1);
     expect(exceptions[0].context?.correlationId).toBe("wamid.err.1");
     expect(exceptions[0].context?.merchantId).toBe(DEMO_MERCHANT_ID);
     // (Masking happens inside the real logger's emit — covered by its own test.)
@@ -322,7 +325,7 @@ describe("unexpected-error path (SPEC §13)", () => {
     );
     expect((rows[0] as { status: string }).status).toBe("errored");
     expect((rows[0] as { last_error: string }).last_error).toContain(
-      "transport exploded",
+      "machine exploded",
     );
   });
 });

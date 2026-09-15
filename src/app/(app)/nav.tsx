@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { activeSection, visibleSections } from "@/lib/nav";
+import { signOut } from "@/app/login/actions";
 
 /**
  * The operator application's top bar. A client component only because
@@ -46,6 +47,9 @@ export function AppNav({ simulatorEnabled }: { simulatorEnabled: boolean }) {
             </Link>
           );
         })}
+        <form action={signOut} className="ms-auto">
+          <button className="text-sm underline">Sign out</button>
+        </form>
       </div>
     </nav>
   );

@@ -1,218 +1,123 @@
-# Deployment (v0.2 Step 7)
+# Deployment
 
-What a deployed ChicChat needs, in the order you need it. Written for Vercel +
-hosted Supabase; anything that runs Next.js 16 and Postgres works, and the only
-platform-specific piece is the cron entry in `vercel.json`.
+ChicChat requires a Node.js Next.js host, PostgreSQL, and a recurring HTTP job.
+The September repairs introduce required migrations and replace shared-passcode
+access with named accounts. Apply the sequence below before serving traffic.
 
-Local development needs none of this — see `README.md`.
+## 1. Database and migrations
 
----
+Back up an existing database and verify the migration sequence in staging first.
+Apply all pending files in `supabase/migrations` using your normal migration runner
+(or link the intended Supabase project and run `npm run db:push`). The new files are:
 
-## 0. What you are deploying
+- `20260909120000_case_history.sql`: snapshots and historical metadata backfill.
+- `20260909130000_reliable_delivery.sql`: durable inbox/outbox and delivery channels.
+- `20260909140000_console_identity.sql`: accounts, memberships, sessions, login throttling.
+- `20260909150000_private_media.sql`: private image storage.
+- `20260909160000_private_tables.sql`: RLS on all application tables.
 
-| Surface | Path | Who reaches it |
-|---|---|---|
-| Merchant case views | `/cases` | operator, behind the passcode |
-| Agent console | `/console` | operator, behind the passcode |
-| Taxonomy editor | `/config` | operator, behind the passcode |
-| Chat simulator | `/simulator` | passcode **and** `SIMULATOR_ENABLED=true` |
-| WhatsApp webhook | `/api/whatsapp/webhook` | Meta — ungated, verifies its own signature |
-| Inactivity job | `/api/maintenance/sessions` | scheduler — bearer secret |
-| Health check | `/api/health` | uptime monitor — ungated, reports no detail |
+The application uses server-side SQL. Configure `DATABASE_URL` with a trusted
+backend role that can access these tables (for example the database owner).
+RLS has no anonymous/authenticated Data API policies; do not expose SQL credentials
+to clients. Use the provider's connection pooler for serverless deployments and
+verified TLS with the provider's CA configuration. Keep the database near the app
+region to reduce transaction latency.
 
-**The console is protected by one shared passcode, not user accounts.** It shows
-customer phone numbers and conversation transcripts (SPEC §12), so the app
-**refuses to start** in production without `CONSOLE_PASSCODE`. Per-user accounts
-and per-merchant permissions are v0.3.
+For a fresh demo database, run `npm run db:seed` with its explicit `DATABASE_URL`.
+Do not seed demo merchants into an established customer database by accident.
 
----
+## 2. Provision accounts before deploying
 
-## 1. Hosted Postgres (Supabase)
-
-1. Create a project. Keep the database password — it is in the connection URI.
-
-   **Pick the region nearest your merchants.** Supabase cannot move a project
-   between regions, so changing your mind means a new project, re-pushed
-   migrations, a re-seed and a new `DATABASE_URL` everywhere. Region choice is
-   free on every plan; there is no reason to accept a distant default.
-
-   Measured from Turkey, on a trivial `select 1`:
-
-   | Region | Per query | Integration suite |
-   |---|---|---|
-   | local container | ~2.5 ms | 33 s |
-   | `eu-central-1` (Frankfurt) | ~44 ms | 4 min |
-   | `ap-south-1` (Mumbai) | ~210 ms | 16 min, with timeouts |
-
-   Every console page runs several queries and every intake turn runs more, so
-   the region is multiplied by each round trip — it is not a one-off cost.
-
-2. Link this repo to it and push the migrations:
+Set `DATABASE_URL` and `CHICCHAT_USER_PASSWORD` in your shell or secret runner.
+The password must contain 12–1024 characters. Then run:
 
 ```bash
-npx supabase link --project-ref <your-project-ref>
+npm run console:user -- operator-name merchant-uuid [another-merchant-uuid]
 ```
 
-```bash
-npm run db:push
-```
+Replace the UUIDs with the merchants that this person may access. Re-running the
+command replaces that account's password and memberships and revokes previous
+sessions. Use a unique account per person. Remove the password environment variable
+after provisioning. The script does not implicitly load `.env.local`.
 
-3. Seed the taxonomy and the demo merchants:
+Production always requires authentication, regardless of `CONSOLE_AUTH_REQUIRED`.
+`CONSOLE_PASSCODE` is retired and old shared-secret cookies are rejected. Sessions
+expire after 12 hours, sign-out revokes the session, and membership/enabled status
+is checked on requests. Console audit events record the account username. All
+members currently have full console/configuration access to their assigned merchants;
+fine-grained roles are a future change.
 
-```bash
-DATABASE_URL='<pooler-uri>' npm run db:seed
-```
+For local authentication checks, set `CONSOLE_AUTH_REQUIRED=true`. Otherwise local
+`next dev` permits development access without an account. Never expose that dev
+server publicly.
 
-Get `<pooler-uri>` from the **Connect** button in the dashboard's top bar (it is
-not under Project Settings): choose the **Transaction pooler** entry, port
-**6543**, and replace the `[YOUR-PASSWORD]` placeholder with the database
-password. Use the pooler, not the direct 5432 URI — serverless functions open many
-short-lived connections and would exhaust a direct connection limit.
+## 3. Configure and deploy the app
 
-**Append `?uselibpqcompat=true&sslmode=require` to the URI.** Two traps:
-
-- Without SSL parameters the pooler happily accepts a **plaintext** connection,
-  so the password and every customer message would cross the internet in the
-  clear. Always verify: `client.connection.stream.encrypted` must be `true`.
-- A bare `?sslmode=require` **fails** with this version of `pg`, which treats
-  `require` as `verify-full` and then rejects Supabase's certificate chain. The
-  `uselibpqcompat=true` prefix restores libpq's meaning: encrypt, do not verify
-  the certificate authority.
-
-That gives encryption against eavesdropping but not against an active
-man-in-the-middle. To close that too, download the project's CA certificate from
-the dashboard, ship it with the deployment, and use
-`?sslmode=verify-full&sslrootcert=<path>`.
-
-`db:seed` is idempotent — re-running it is safe, and it re-links each merchant's
-WhatsApp number from the environment.
-
----
-
-## 2. Environment variables
-
-Set these on the host (Vercel → Settings → Environment Variables). `.env.example`
-lists them all with comments; these are the ones a deployment cannot do without.
-
-| Variable | Required | Notes |
-|---|---|---|
-| `DATABASE_URL` | **yes** | Pooler URI + `?sslmode=require` |
-| `CONSOLE_PASSCODE` | **yes** in production | ≥ 12 characters; the app will not boot without it |
-| `MAINTENANCE_SECRET` | recommended | Lets you trigger the inactivity job by hand |
-| `CRON_SECRET` | recommended | Vercel sends this automatically to cron invocations |
-| `WHATSAPP_*` | Step 8 | Until Meta is wired up the console and simulator work without them |
-| `WHATSAPP_APP_SECRET` | with Meta | **Signature verification is mandatory in production** — inbound is rejected without it |
-| `SIMULATOR_ENABLED` | optional | `true` exposes `/simulator`; it writes real cases |
-
-The app checks all of this at boot (`src/instrumentation.ts`) and either lists
-what is missing and refuses to start, or logs warnings and continues. After
-deploying, `GET /api/health` returns `{"ok":true,"database":"up","warnings":N}`.
-
----
-
-## 3. Deploy
-
-```bash
-npx vercel deploy --prod
-```
-
-Vercel detects Next.js; no build configuration is needed.
-
-## 3a. Scheduling the inactivity job
-
-The nudge fires after `nudge_after_minutes` (default 5), so the sweep must run at
-least that often. **A free Vercel plan only runs crons once a day**, which would
-effectively disable the nudge — so the schedule lives outside Vercel:
-
-`.github/workflows/maintenance.yml` calls the endpoint every 5 minutes. Add two
-repository secrets (Settings → Secrets and variables → Actions):
-
-| Secret | Value |
+| Setting | Purpose |
 |---|---|
-| `MAINTENANCE_URL` | `https://<host>/api/maintenance/sessions` |
-| `MAINTENANCE_SECRET` | the same value as the deployment's `MAINTENANCE_SECRET` |
+| `DATABASE_URL` | Required server-side PostgreSQL connection |
+| `WHATSAPP_ACCESS_TOKEN` | Meta system-user token for sending and private media retrieval |
+| `WHATSAPP_APP_SECRET` | Required to verify production webhook signatures |
+| `WHATSAPP_VERIFY_TOKEN` | Verification handshake secret configured in Meta |
+| `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, `WHATSAPP_GRAPH_VERSION` | Meta connection configuration; merchant number mappings live in `whatsapp_channels` |
+| `MAINTENANCE_SECRET` or `CRON_SECRET` | Bearer credential for maintenance |
+| `SIMULATOR_ENABLED=true` | Optional production simulator, protected by account memberships |
 
-Without them the workflow exits successfully without calling anything. Any other
-scheduler works the same way — cron-job.org, an uptime monitor, a server crontab:
+Run `npm ci`, `npm run build`, and deploy with your host's normal process. Ensure
+Node.js middleware is supported, and allow the maintenance route's configured
+execution duration. Do not run a hosted migration implicitly at application startup.
 
-```bash
-curl -fsS -X POST -H "Authorization: Bearer $MAINTENANCE_SECRET" https://<host>/api/maintenance/sessions
-```
+Webhook processing persists messages before acknowledging them. A failed database
+acceptance returns 503 for provider retry. Processing runs after the response and
+is recovered by maintenance if interrupted. Replies are durable and retried in
+conversation order with exponential backoff. External delivery remains at-least-once.
 
-The endpoint also accepts `GET`, since many schedulers only send GET. It is
-idempotent: a late or doubled run cannot double-nudge, because the session is
-marked before the message is sent.
+New image evidence is downloaded to private PostgreSQL storage and served only
+through merchant-scoped authenticated routes, with no-store caching. Existing
+expired Meta-only image references remain unavailable. Include this storage in
+capacity planning and backup lifecycle management.
 
-<details>
-<summary>On a paid Vercel plan you can use its own cron instead</summary>
+## 4. Enable maintenance
 
-Add `vercel.json`:
+Review merchant retention settings before enabling this job: it permanently deletes
+expired cases, transcripts, photos, queued messages and sessions. The default is
+12 months. Configuration also exposes explicit per-customer erasure.
 
-```json
-{
-  "crons": [{ "path": "/api/maintenance/sessions", "schedule": "*/5 * * * *" }]
-}
-```
+The endpoint `/api/maintenance/sessions` accepts GET or POST with
+`Authorization: Bearer <secret>`. It runs retention, pending inbox processing,
+inactivity handling, and outbound retries. Invoke it every five minutes or more
+frequently according to operational requirements.
 
-Vercel supplies `CRON_SECRET` automatically; set it as an environment variable
-and the endpoint accepts it. Then delete the GitHub workflow so the job is not
-swept twice.
+The included `.github/workflows/maintenance.yml` uses repository secrets:
 
-</details>
+- `MAINTENANCE_URL`: the deployed endpoint URL.
+- `MAINTENANCE_SECRET`: the same secret as the app.
 
----
+Missing secrets, HTTP failures, and nonzero `failed` summaries fail the workflow.
+Configure notifications for those failures. A scheduler with stricter timing may
+be needed for precise nudge delivery. Bounded batches resume on subsequent runs;
+monitor queue backlog as traffic grows. Do not rely solely on post-response work.
 
-## 4. Verify the deployment
+## 5. Verify in staging
 
-```bash
-curl -s https://<host>/api/health
-```
+1. Check `/api/health` and inspect startup warnings.
+2. Confirm logged-out `/cases`, `/console`, `/config`, and `/simulator` require login.
+3. Sign in with an account assigned to one merchant; confirm no other merchant's
+   cases, simulator actions or private photos can be accessed.
+4. Run a simulated photo intake, open its case and evidence, inject a delivery
+   failure, and retry the pending reply.
+5. Run maintenance on synthetic due sessions and inspect its JSON summary.
+6. Verify a signed Meta webhook and an actual reply using a designated test number.
+7. Verify sign-out revokes access, then enable production traffic and monitoring.
 
-Then, in a browser:
+Use a disposable local database for automated tests. See [README](../README.md).
+The concurrency repair tests intentionally commit transactions and refuse to run
+unless the database is local and named with an `_test` suffix.
 
-1. `/cases` redirects to `/login`; the passcode gets you in.
-2. The merchant switcher lists both seeded merchants and switching changes the data.
-3. With `SIMULATOR_ENABLED=true`, `/simulator` completes an intake and the case
-   appears in `/cases` and `/console` — this is the Step 7 gate.
-4. `/api/whatsapp/webhook` is reachable without the passcode and answers `403`
-   to a wrong verify token.
+## Rollback
 
-Wiring the real Meta number at the deployed URL is **Step 8**, not this step.
-
----
-
-## 5. Running the tests against hosted config
-
-The integration suite writes and rolls back real transactions, so point it at a
-database you do not mind touching — a second Supabase project, or a branch:
-
-```bash
-DATABASE_URL='<pooler-uri>' npm run test:db
-```
-
-It seeds before running. Never point it at a database serving real merchants.
-Against Frankfurt the suite passes in about four minutes, versus 33 seconds
-against a local container.
-
-**From a distant region, add `--testTimeout=180000`.** The 30 s default per test
-is generous at 2 ms a query and far too tight at 210 ms: the heaviest tests
-drive two complete intakes — well over a hundred sequential round trips — and
-time out while being perfectly correct. The config keeps the 30 s default so a
-genuinely hung local test still fails fast, so raise it on the command line:
-
-```bash
-DATABASE_URL='<pooler-uri>' npx vitest run --config vitest.integration.config.ts --testTimeout=180000
-```
-
----
-
-## What is deliberately not here
-
-- **Per-merchant WhatsApp access tokens.** One Meta app's system-user token can
-  send from every number in its WABAs, and the number to send *from* is already
-  per-merchant (`whatsapp_channels`). Storing a token per merchant only becomes
-  necessary when merchants bring their own Meta apps.
-- **Per-user authentication and audit.** Console actions are attributed to
-  `agent`; the schema has the column, and identity fills it in v0.3.
-- **Media storage.** Photos are WhatsApp media ids; downloading them into a
-  private bucket lands with KVKK retention (docs/RETROFIT.md R13).
+Keep backups until staging and production checks pass. The migrations are additive,
+but a rollback to the old application restores its old authentication and delivery
+semantics. Do not remove inbox/outbox/media tables to roll back the app: that would
+lose queued work and evidence. Prefer fixing forward, or temporarily stop incoming
+traffic and workers while choosing a compatible application version.

@@ -1,3 +1,4 @@
+import { EvidencePhotos } from "../evidence-photos";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { formatDuration } from "@/lib/cases/analytics";
@@ -144,22 +145,10 @@ export default async function CaseDetailPage({
         </Panel>
 
         <Panel title={`Photos (${photos.length})`}>
-          {photos.length === 0 ? (
-            <p className="text-sm text-zinc-500">No photo attached.</p>
-          ) : (
-            <ul className="space-y-1 text-sm">
-              {photos.map((p) => (
-                <li key={p.field_key} className="flex items-center gap-2">
-                  <span>🖼️</span>
-                  <code className="text-xs">{p.normalized_value}</code>
-                  <span className="text-xs text-zinc-500">
-                    WhatsApp media id — private-bucket download lands with KVKK
-                    storage
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <EvidencePhotos
+            caseId={id}
+            photos={photos.map((photo) => photo.normalized_value!)}
+          />
         </Panel>
 
         <Panel title="Timeline">

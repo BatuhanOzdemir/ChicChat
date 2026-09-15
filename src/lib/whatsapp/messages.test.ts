@@ -1,8 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { promptToMessage } from "./messages";
+import { promptToMessage, nudgeMessage, genericErrorMessage } from "./messages";
 import type { Prompt } from "../intake";
 
 const TO = "905551112233";
+
+it("uses the merchant's Turkish locale for prompts, reminders and failures", () => {
+  const prompt = promptToMessage(
+    {
+      kind: "select_category",
+      options: [{ key: "iade", label: "İade" }],
+      retry: false,
+      disclosure: "https://example.com/kvkk",
+    },
+    TO,
+    "tr",
+  );
+  expect(JSON.stringify(prompt)).toContain("Nasıl yardımcı olabiliriz?");
+  expect(JSON.stringify(prompt)).toContain("aydınlatma metni");
+  expect(JSON.stringify(nudgeMessage(TO, "tr"))).toContain("Kaldığınız yerden");
+  expect(JSON.stringify(genericErrorMessage(TO, "tr"))).toContain(
+    "temsilcimiz",
+  );
+});
 
 describe("promptToMessage — KVKK disclosure (SPEC §12)", () => {
   const options = [{ key: "return", label: "Return request" }];

@@ -113,8 +113,10 @@ simulator gains whatever controls are needed to exercise them.
 
 ## 10. Non-functional requirements
 
-Webhook route returns 200 immediately after signature check; processing after
-acknowledgement. Flow data-exchange endpoint is the one hard latency budget
+Webhook route verifies the signature, durably stores accepted messages, then
+returns 200; intake processing happens after acknowledgement. If durable
+acceptance fails, return 503 so Meta retries rather than silently losing work.
+Flow data-exchange endpoint is the one hard latency budget
 (Meta health checks throttle/block slow endpoints) — mitigate via order caching.
 Small fixed number of DB queries per message.
 
@@ -140,7 +142,14 @@ Verify X-Hub-Signature-256; validate all payloads at boundaries; never log
 secrets or unmasked phones (mask to last 4); generic user-facing errors.
 KVKK: disclosure line at conversation start; merchant-configurable retention
 (default 12 months) with hard delete; per-phone-number deletion operation;
-photos in private buckets.
+photos in private storage. The September repair uses private PostgreSQL bytea
+storage (10 MB per photo) and authenticated merchant-scoped image routes;
+there are no public media URLs. Existing expired Meta-only references cannot
+be recovered retroactively.
+
+Console access uses named accounts, salted password hashes, expiring opaque
+sessions, and explicit merchant memberships. Every member can operate the
+console for their assigned merchants. Finer admin/agent roles remain future work.
 
 ## 13. Failure scenarios (defined behaviour)
 
@@ -151,8 +160,10 @@ photos in private buckets.
 | Order not found (Tier 1) | Inform, one retry, then continue Tier-0 |
 | Multiple matching orders | Disambiguate by order date (list, ≤10) |
 | Integration down | Degrade conversation to Tier-0; flag on case; log |
-| DB down | 200 to Meta; error log; "try again shortly" if send possible |
-| Duplicate webhook | Idempotency skip |
+| DB down before durable acceptance | 503 to Meta for retry; sanitized error log |
+| Processing fails after acceptance | Keep inbox work for retry; preserve/mark errored session; queue one generic reply |
+| Reply delivery fails | Preserve the outgoing reply; retry with backoff; show pending delivery in the console |
+| Duplicate webhook | One intake effect; already-persisted pending replies remain retryable |
 | Flow endpoint failure | Error screen with retry; cache minimizes |
 | Unknown/unexpected exception | Catch at handler boundary; log with stack + correlation id; send generic "something went wrong, an agent will follow up"; mark session `errored`; surface in merchant console |
 | Abandoned conversation | TTL rules (§11) |

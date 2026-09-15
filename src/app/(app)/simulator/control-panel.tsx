@@ -18,6 +18,7 @@ interface ControlPanelProps {
   onRunPreset: (preset: Preset) => void;
   onTimeTravel: (minutes: number) => void;
   onRunMaintenance: () => void;
+  onRetryDelivery: () => void;
   onReset: () => void;
 }
 
@@ -37,6 +38,7 @@ export function ControlPanel({
   onRunPreset,
   onTimeTravel,
   onRunMaintenance,
+  onRetryDelivery,
   onReset,
 }: ControlPanelProps) {
   const field =
@@ -117,6 +119,14 @@ export function ControlPanel({
 
       <div className="space-y-2">
         <h2 className="font-medium">Injection &amp; time</h2>
+        <button
+          type="button"
+          className={button}
+          disabled={busy}
+          onClick={onRetryDelivery}
+        >
+          Retry pending delivery
+        </button>
         <label className="block text-xs text-zinc-500">
           Error injection (applies to the next message)
           <select
@@ -128,6 +138,7 @@ export function ControlPanel({
           >
             <option value="">none</option>
             <option value="handler_exception">handler_exception</option>
+            <option value="delivery_failure">delivery_failure</option>
             <option value="integration_down">integration_down</option>
           </select>
         </label>

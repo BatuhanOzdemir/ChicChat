@@ -9,9 +9,13 @@ import { AppNav } from "./nav";
  * Whether the simulator exists is a server question (it is absent in
  * production unless enabled), so it is answered here and handed to the nav.
  */
-export default function AppLayout({
+import { requirePrincipal } from "@/server/auth/current";
+import { getDatabase } from "@/db/client";
+
+export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  await requirePrincipal(getDatabase());
   return (
     <>
       <AppNav simulatorEnabled={isSimulatorEnabled()} />

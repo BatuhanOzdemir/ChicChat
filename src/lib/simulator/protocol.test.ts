@@ -54,7 +54,8 @@ describe("parseSimulatorRequest", () => {
     });
     expect(bad).toEqual({
       ok: false,
-      error: "injectError must be one of handler_exception|integration_down",
+      error:
+        "injectError must be one of handler_exception|integration_down|delivery_failure",
     });
   });
 

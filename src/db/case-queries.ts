@@ -12,6 +12,33 @@ import type { Queryable } from "./database";
 
 export const PAGE_SIZE = 25;
 
+export async function caseCategoryOptions(
+  db: Queryable,
+  merchantId: string,
+): Promise<{ key: string; label: string }[]> {
+  const { rows } = await db.query(
+    `select key, min(label) as label from (
+    select key,label from categories where merchant_id=$1 union all
+    select category_key_snapshot,category_label_snapshot from cases where merchant_id=$1
+  ) categories group by key order by label`,
+    [merchantId],
+  );
+  return rows as { key: string; label: string }[];
+}
+
+export async function deliveryIssues(db: Queryable, merchantId: string) {
+  const { rows } = await db.query(
+    `select customer_wa_id, attempts, last_error from message_outbox
+    where merchant_id=$1 and delivered_at is null and attempts>0 order by id limit 50`,
+    [merchantId],
+  );
+  return rows as {
+    customer_wa_id: string;
+    attempts: number;
+    last_error: string | null;
+  }[];
+}
+
 /**
  * "The order number" is whichever field the merchant marked with the
  * `order_number` normalization rule — not a field literally called
@@ -19,9 +46,7 @@ export const PAGE_SIZE = 25;
  * order column and an order search (Step 6).
  */
 const ORDER_NUMBER_FIELD = `from case_fields cf
-       join field_defs fd
-         on fd.category_id = c.category_id and fd.key = cf.field_key
-      where cf.case_id = c.id and fd.normalize_rule = 'order_number'`;
+      where cf.case_id = c.id and cf.normalize_rule_snapshot = 'order_number'`;
 
 export interface CaseListRow {
   id: string;
@@ -58,7 +83,8 @@ function whereClause(filters: CaseFilters): {
   };
 
   if (filters.status) parts.push(`c.status = ${add(filters.status)}`);
-  if (filters.categoryKey) parts.push(`cat.key = ${add(filters.categoryKey)}`);
+  if (filters.categoryKey)
+    parts.push(`c.category_key_snapshot = ${add(filters.categoryKey)}`);
   if (filters.queue === UNROUTED_QUEUE) parts.push("c.queue is null");
   else if (filters.queue) parts.push(`c.queue = ${add(filters.queue)}`);
   if (filters.from) parts.push(`c.created_at >= ${add(filters.from)}::date`);
@@ -85,13 +111,13 @@ export async function listCases(
 
   const { rows } = await db.query(
     `select c.id, c.status, c.priority, c.queue,
-            cat.key as category_key, cat.label as category_label,
-            sub.key as subcategory_key, c.customer_wa_id, c.created_at,
+            c.category_key_snapshot as category_key, c.category_label_snapshot as category_label,
+            c.subcategory_key_snapshot as subcategory_key, c.customer_wa_id, c.created_at,
             (select cf.normalized_value ${ORDER_NUMBER_FIELD}
-              order by fd.sort_order limit 1) as order_number,
+              order by cf.sort_order_snapshot limit 1) as order_number,
             (select count(*)::int from case_fields f where f.case_id = c.id) as field_count
        from cases c
-       join categories cat on cat.id = c.category_id
+       left join categories cat on cat.id = c.category_id
        left join subcategories sub on sub.id = c.subcategory_id
       where ${sql}
       order by c.created_at desc
@@ -102,7 +128,7 @@ export async function listCases(
   const { rows: countRows } = await db.query(
     `select count(*)::int as n
        from cases c
-       join categories cat on cat.id = c.category_id
+       left join categories cat on cat.id = c.category_id
       where ${sql}`,
     [merchantId, ...params],
   );
@@ -149,10 +175,10 @@ export async function getCaseDetail(
 ): Promise<CaseDetail | null> {
   const { rows } = await db.query(
     `select c.id, c.status, c.priority, c.queue, c.integration_tier,
-            c.customer_wa_id, cat.key as category_key, cat.label as category_label,
-            sub.key as subcategory_key, c.created_at, c.intake_started_at
+            c.customer_wa_id, c.category_key_snapshot as category_key, c.category_label_snapshot as category_label,
+            c.subcategory_key_snapshot as subcategory_key, c.created_at, c.intake_started_at
        from cases c
-       join categories cat on cat.id = c.category_id
+       left join categories cat on cat.id = c.category_id
        left join subcategories sub on sub.id = c.subcategory_id
       where c.id = $2 and c.merchant_id = $1`,
     [merchantId, caseId],
@@ -161,13 +187,11 @@ export async function getCaseDetail(
   if (!header) return null;
 
   const { rows: fields } = await db.query(
-    `select cf.field_key, cf.raw_value, cf.normalized_value, fd.type, cf.created_at
+    `select cf.field_key, cf.raw_value, cf.normalized_value, cf.type_snapshot as type, cf.created_at
        from case_fields cf
        join cases c on c.id = cf.case_id
-       left join field_defs fd
-         on fd.category_id = c.category_id and fd.key = cf.field_key
       where cf.case_id = $1
-      order by coalesce(fd.sort_order, 0), cf.field_key`,
+      order by cf.sort_order_snapshot, cf.field_key`,
     [caseId],
   );
 
@@ -209,10 +233,10 @@ export async function caseCounters(
   );
 
   const { rows: byCategory } = await db.query(
-    `select cat.key as category_key, cat.label as category_label, count(*)::int as n
-       from cases c join categories cat on cat.id = c.category_id
+    `select c.category_key_snapshot as category_key, c.category_label_snapshot as category_label, count(*)::int as n
+       from cases c left join categories cat on cat.id = c.category_id
       where c.merchant_id = $1 and c.created_at > now() - $2::interval
-      group by cat.key, cat.label order by n desc`,
+      group by c.category_key_snapshot, c.category_label_snapshot order by n desc`,
     [merchantId, since],
   );
 

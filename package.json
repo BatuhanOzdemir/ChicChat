@@ -13,6 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:db": "vitest run --config vitest.integration.config.ts",
+    "test:db:prepare": "node scripts/prepare-test-db.mjs",
+    "console:user": "node scripts/console-user.mjs",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:migrate": "supabase migration up",

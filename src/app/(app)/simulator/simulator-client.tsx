@@ -29,10 +29,14 @@ function bubbleFor(message: OutboundMessage): TranscriptEntry {
 
 export function SimulatorClient({
   merchants,
+  selectedMerchantId,
 }: {
   merchants: MerchantOption[];
+  selectedMerchantId?: string;
 }) {
-  const [merchantId, setMerchantId] = useState(merchants[0]?.id ?? "");
+  const [merchantId, setMerchantId] = useState(
+    selectedMerchantId ?? merchants[0]?.id ?? "",
+  );
   const [phone, setPhone] = useState(DEFAULT_PHONE);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [session, setSession] = useState<IntakeState | null>(null);
@@ -48,6 +52,7 @@ export function SimulatorClient({
   );
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const injectionRef = useRef<SimulatorErrorInjection | "">("");
 
   const rtl = merchants.find((m) => m.id === merchantId)?.rtl ?? false;
 
@@ -114,13 +119,16 @@ export function SimulatorClient({
         text: label ?? message.value,
         isPhoto: message.kind === "photo",
       });
+      const injection = injectionRef.current;
+      injectionRef.current = "";
+      setInjectError("");
       return call({
         action: "message",
         message,
-        ...(injectError ? { injectError } : {}),
+        ...(injection ? { injectError: injection } : {}),
       });
     },
-    [call, injectError, push],
+    [call, push],
   );
 
   const guard = useCallback(async (fn: () => Promise<void>) => {
@@ -199,7 +207,10 @@ export function SimulatorClient({
           injectError={injectError}
           onMerchantChange={changeMerchant}
           onPhoneChange={setPhone}
-          onInjectChange={setInjectError}
+          onInjectChange={(value) => {
+            injectionRef.current = value;
+            setInjectError(value);
+          }}
           onSendPhoto={() =>
             guard(
               async () =>
@@ -227,6 +238,11 @@ export function SimulatorClient({
           onRunMaintenance={() =>
             guard(async () => {
               await call({ action: "maintenance" });
+            })
+          }
+          onRetryDelivery={() =>
+            void guard(async () => {
+              await call({ action: "retry_delivery" });
             })
           }
           onReset={() =>

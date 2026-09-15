@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EvidencePhotos } from "../../cases/evidence-photos";
 import { notFound } from "next/navigation";
 import { formatDuration } from "@/lib/cases/analytics";
 import { nextStatuses } from "@/lib/cases/workflow";
@@ -200,16 +201,7 @@ export default async function ConsoleCasePage({
             </ul>
           )}
 
-          {handoff.photos.length > 0 && (
-            <ul className="mt-3 space-y-1 text-sm">
-              {handoff.photos.map((photo) => (
-                <li key={photo} className="flex items-center gap-2">
-                  <span>🖼️</span>
-                  <code className="text-xs">{photo}</code>
-                </li>
-              ))}
-            </ul>
-          )}
+          <EvidencePhotos caseId={id} photos={handoff.photos} />
 
           <details className="mt-3">
             <summary className="cursor-pointer text-xs text-zinc-500">

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getPool } from "@/db/client";
-import { listMerchants } from "@/db/config";
+import { merchantContext } from "@/server/merchant/current";
 import { isSimulatorEnabled } from "@/server/simulator/enabled";
 import { SimulatorClient } from "./simulator-client";
 
@@ -11,7 +11,8 @@ export default async function SimulatorPage() {
   // Development/demo surface only (SPEC §7).
   if (!isSimulatorEnabled()) notFound();
 
-  const merchants = await listMerchants(getPool());
+  const context = await merchantContext(getPool());
+  const merchants = context?.options ?? [];
 
   return (
     <main className="mx-auto max-w-6xl p-6 text-zinc-900 dark:text-zinc-100">
@@ -29,7 +30,10 @@ export default async function SimulatorPage() {
           No merchants found. Run <code>npm run db:seed</code> first.
         </p>
       ) : (
-        <SimulatorClient merchants={merchants} />
+        <SimulatorClient
+          merchants={merchants}
+          selectedMerchantId={context?.current.id}
+        />
       )}
     </main>
   );

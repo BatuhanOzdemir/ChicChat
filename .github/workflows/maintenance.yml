@@ -35,10 +35,10 @@ jobs:
           SECRET: ${{ secrets.MAINTENANCE_SECRET }}
         run: |
           if [ -z "$URL" ] || [ -z "$SECRET" ]; then
-            echo "MAINTENANCE_URL / MAINTENANCE_SECRET are not configured yet — nothing to do."
-            exit 0
+            echo "Maintenance is not configured. Set MAINTENANCE_URL and MAINTENANCE_SECRET."
+            exit 1
           fi
           # -f so an HTTP error fails the step; the response body is the summary.
-          curl -fsS -X POST "$URL" \
-            -H "Authorization: Bearer $SECRET" \
-            -w '\nHTTP %{http_code}\n'
+          response=$(curl -fsS --max-time 240 -X POST "$URL" -H "Authorization: Bearer $SECRET")
+          echo "$response"
+          echo "$response" | jq -e '.failed == 0' > /dev/null

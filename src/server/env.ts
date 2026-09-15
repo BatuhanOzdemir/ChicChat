@@ -10,7 +10,6 @@
  *  - **warnings**: it will run, but degraded in a way worth saying out loud
  *    (e.g. no signature verification, no scheduler secret).
  */
-import { MIN_PASSCODE_LENGTH } from "@/lib/auth/gate";
 
 export interface EnvReport {
   missing: string[];
@@ -30,17 +29,6 @@ export function checkEnvironment(
   if (value("DATABASE_URL") === "") missing.push("DATABASE_URL");
 
   if (isProduction) {
-    const passcode = value("CONSOLE_PASSCODE");
-    if (passcode === "") {
-      missing.push(
-        "CONSOLE_PASSCODE (the console would serve case data openly)",
-      );
-    } else if (passcode.length < MIN_PASSCODE_LENGTH) {
-      missing.push(
-        `CONSOLE_PASSCODE (must be at least ${MIN_PASSCODE_LENGTH} characters)`,
-      );
-    }
-
     // WhatsApp credentials are only required once Meta is wired up (Step 8), so
     // an incomplete set is a warning: the console and simulator still work.
     const whatsapp = [
@@ -74,7 +62,7 @@ export function checkEnvironment(
     if (value("SIMULATOR_ENABLED") === "true") {
       warnings.push(
         "SIMULATOR_ENABLED=true — the simulator writes real cases in this " +
-          "deployment (it is behind the console passcode)",
+          "deployment (it requires a named console account)",
       );
     }
   }
