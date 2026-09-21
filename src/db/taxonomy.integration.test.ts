@@ -311,3 +311,40 @@ describe("tenant scoping", () => {
     expect(rule.ok).toBe(false);
   });
 });
+
+it("category, subcategory, and field writes preserve saved non-default policy", async () => {
+  const policy = ok(
+    parsePolicy({
+      return_window_days: "47",
+      refund_sla_days: "9",
+      nudge_after_minutes: "12",
+      abandon_after_hours: "72",
+      retention_months: "4",
+      kvkk_url: "https://example.com/privacy",
+      order_id_regex: "^[A-Z0-9]{5,}$",
+    }),
+  );
+  await updatePolicy(db, DEMO_MERCHANT_ID, policy);
+  const before = (await loadMerchantConfig(db, DEMO_MERCHANT_ID))!.settings;
+  const category = await createCategory(
+    db,
+    DEMO_MERCHANT_ID,
+    ok(parseNamed({ label: "Policy regression" }, "category")),
+  );
+  if (!category.ok) throw new Error(category.error);
+  await createSubcategory(
+    db,
+    DEMO_MERCHANT_ID,
+    category.id,
+    ok(parseNamed({ label: "Child" }, "subcategory")),
+  );
+  await createField(
+    db,
+    DEMO_MERCHANT_ID,
+    category.id,
+    ok(parseField({ label: "Details", type: "string" })),
+  );
+  expect((await loadMerchantConfig(db, DEMO_MERCHANT_ID))!.settings).toEqual(
+    before,
+  );
+});

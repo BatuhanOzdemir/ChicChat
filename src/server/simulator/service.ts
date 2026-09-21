@@ -131,7 +131,16 @@ async function runAction(
     return emptyResponse();
   }
 
-  if (request.action === "maintenance") {
+  if (request.action === "maintenance" || request.action === "time_travel") {
+    const aged =
+      request.action === "time_travel"
+        ? await ageSession(db, merchantId, phone, request.ageMinutes ?? 0)
+        : false;
+    if (request.action === "time_travel" && !aged)
+      return {
+        ...emptyResponse(),
+        notice: "No active session to age. Start a conversation first.",
+      };
     const outbound: OutboundMessage[] = [];
     const summary = await runSessionMaintenance(
       {
@@ -148,34 +157,34 @@ async function runAction(
       phone,
     );
     const { state, meta } = await readSession(db, merchantId, phone);
+    let completedCase: HandoffPackage | null = null;
+    if (summary.abandoned) {
+      const { rows } = await db.query(
+        `select id from cases where merchant_id=$1 and customer_wa_id=$2 and status='abandoned' order by created_at desc, id desc limit 1`,
+        [merchantId, phone],
+      );
+      const row = rows[0] as { id: string } | undefined;
+      if (row) completedCase = await buildHandoff(db, row.id);
+    }
     return {
       ...emptyResponse(),
       outbound,
       session: state,
       sessionMeta: meta,
+      completedCase,
       notice:
-        `maintenance: nudged ${summary.nudged}, abandoned ${summary.abandoned}, ` +
+        (aged ? `Session aged by ${request.ageMinutes} minute(s). ` : "") +
+        `Inactivity check: nudged ${summary.nudged}, abandoned ${summary.abandoned}, ` +
         `deleted ${summary.deleted}` +
+        (summary.nudged +
+          summary.abandoned +
+          summary.deleted +
+          summary.failed ===
+        0
+          ? ". No action due: the threshold is not reached, or this session has already received its nudge."
+          : "") +
         // Only mentioned when it happened, so a clean run stays quiet.
         (summary.failed > 0 ? `, failed ${summary.failed}` : ""),
-    };
-  }
-
-  if (request.action === "time_travel") {
-    const aged = await ageSession(
-      db,
-      merchantId,
-      phone,
-      request.ageMinutes ?? 0,
-    );
-    const { state, meta } = await readSession(db, merchantId, phone);
-    return {
-      ...emptyResponse(),
-      session: state,
-      sessionMeta: meta,
-      notice: aged
-        ? `Session aged by ${request.ageMinutes} minute(s).`
-        : "No active session to age.",
     };
   }
 

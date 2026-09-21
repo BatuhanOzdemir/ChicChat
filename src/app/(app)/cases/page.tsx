@@ -122,6 +122,10 @@ export default async function CasesPage({
         </p>
       </header>
 
+      <p className="mb-4 text-sm text-zinc-500">
+        Browse all cases and intake statistics. Open a case to work on it in the
+        Agent console. Dates use DD/MM/YYYY, Istanbul time.
+      </p>
       <div className="space-y-4">
         <Panel title="Last 30 days">
           <div className="flex flex-wrap gap-3">
@@ -228,7 +232,7 @@ export default async function CasesPage({
                 className={field}
                 name="order_number"
                 defaultValue={filters.orderNumber ?? ""}
-                placeholder="#tr-100 432"
+                placeholder="Your store’s order number"
               />
             </label>
             <button
@@ -325,7 +329,9 @@ export default async function CasesPage({
                         )}
                       </td>
                       <td className="py-1.5 pe-3 font-mono text-xs">
-                        {row.order_number ?? "—"}
+                        <Link className="underline" href={`/console/${row.id}`}>
+                          {row.order_number ?? "No order number"}
+                        </Link>
                       </td>
                       <td className="py-1.5 pe-3 font-mono text-xs">
                         {maskedPhone(row.customer_wa_id)}
@@ -334,9 +340,9 @@ export default async function CasesPage({
                       <td className="py-1.5">
                         <Link
                           className="text-xs underline"
-                          href={`/cases/${row.id}`}
+                          href={`/console/${row.id}`}
                         >
-                          open
+                          Work on case
                         </Link>
                       </td>
                     </tr>

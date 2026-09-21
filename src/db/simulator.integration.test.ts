@@ -1,3 +1,5 @@
+import { PRESETS } from "../app/(app)/simulator/presets";
+import { playPreset } from "../app/(app)/simulator/run-preset";
 import { execFileSync } from "node:child_process";
 import {
   afterAll,
@@ -274,4 +276,62 @@ describe("simulator controls", () => {
     );
     expect((rows[0] as { n: number }).n).toBe(1);
   });
+});
+
+describe("the actual UI presets", () => {
+  it.each(PRESETS.filter((preset) => !preset.replayGreeting))(
+    "completes $id without rejection or looping",
+    async (preset) => {
+      const phone = "905550000108";
+      const notices: string[] = [];
+      let completed: SimulatorResponse["completedCase"] = null;
+      let sent = 0;
+      await playPreset(preset, {
+        reset: () =>
+          runSimulatorAction(db, {
+            action: "reset",
+            merchantId: DEMO_MERCHANT_ID,
+            phone,
+          }),
+        send: async (message) => {
+          sent++;
+          const response = await send(phone, message);
+          expect(response.error).toBeNull();
+          if (response.completedCase) completed = response.completedCase;
+          return response;
+        },
+        stopped: () => false,
+        notify: (message) => notices.push(message),
+      });
+      expect(completed).not.toBeNull();
+      expect(notices).toEqual([]);
+      expect(sent).toBeLessThan(10);
+    },
+  );
+});
+
+it("aging a conversation immediately nudges once, then exposes its abandoned case", async () => {
+  const phone = "905550000109";
+  await send(phone, { kind: "text", value: "hi" });
+  await send(phone, { kind: "list", value: "return" });
+  await send(phone, { kind: "list", value: "doesnt_fit" });
+  await send(phone, { kind: "text", value: "100432" });
+  const age = (minutes: number) =>
+    runSimulatorAction(db, {
+      action: "time_travel",
+      merchantId: DEMO_MERCHANT_ID,
+      phone,
+      ageMinutes: minutes,
+    });
+  const nudged = await age(5);
+  expect(nudged.outbound).toHaveLength(1);
+  expect(nudged.notice).toContain("nudged 1");
+  expect(nudged.session?.fields.order_number.normalized).toBe("100432");
+  const again = await age(5);
+  expect(again.outbound).toEqual([]);
+  expect(again.notice).toContain("already received its nudge");
+  const abandoned = await age(1440);
+  expect(abandoned.session).toBeNull();
+  expect(abandoned.completedCase?.status).toBe("abandoned");
+  expect(abandoned.completedCase?.fields.order_number).toBe("100432");
 });

@@ -2,6 +2,7 @@
  * Shared presentation for the case views (SPEC §8). Server components.
  */
 import type { ReactNode } from "react";
+import { formatDateTime } from "@/lib/cases/date";
 
 const STATUS_TONE: Record<string, string> = {
   open: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200",
@@ -81,5 +82,5 @@ export function maskedPhone(phone: string): string {
 }
 
 export function formatWhen(value: string): string {
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }

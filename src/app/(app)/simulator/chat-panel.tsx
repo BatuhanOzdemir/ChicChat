@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { ListRow } from "@/lib/whatsapp";
 import type { TranscriptEntry } from "./types";
+import { availableOptions } from "./available-options";
 
 interface ChatPanelProps {
   transcript: TranscriptEntry[];
   busy: boolean;
+  active: boolean;
   rtl: boolean;
   onSendText: (text: string) => void;
   onTapOption: (row: ListRow) => void;
@@ -22,6 +24,7 @@ const BUBBLE: Record<TranscriptEntry["role"], string> = {
 export function ChatPanel({
   transcript,
   busy,
+  active,
   rtl,
   onSendText,
   onTapOption,
@@ -40,8 +43,7 @@ export function ChatPanel({
     onSendText(text);
   }
 
-  const lastBot = [...transcript].reverse().find((e) => e.role === "bot");
-  const openOptions = lastBot?.options ?? [];
+  const openOptions = availableOptions(transcript, active);
 
   return (
     <section

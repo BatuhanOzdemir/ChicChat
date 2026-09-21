@@ -29,7 +29,7 @@ export const PRESETS: Preset[] = [
     answers: {
       order_number: { kind: "text", value: "  #tr-100 432 " },
       item_ref: { kind: "text", value: "blue slim fit shirt, size M" },
-      reason: { kind: "text", value: "it doesn't fit" },
+      reason: { kind: "list", value: "wrong_size" },
       condition: { kind: "text", value: "unworn_tags_on" },
     },
   },
@@ -63,7 +63,7 @@ export const PRESETS: Preset[] = [
         value: '{"item_ref":"Chino Trousers — Beige / 32"}',
       },
       desired_variant: { kind: "text", value: "34" },
-      reason: { kind: "text", value: "too tight" },
+      reason: { kind: "list", value: "wrong_size" },
     },
   },
   {

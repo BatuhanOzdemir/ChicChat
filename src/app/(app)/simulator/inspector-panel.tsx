@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDateTime } from "@/lib/cases/date";
 import type { HandoffPackage } from "@/db/cases";
 import type { IntakeState } from "@/lib/intake";
 
@@ -60,7 +61,7 @@ export function InspectorPanel({
             {sessionMeta && (
               <Row
                 label="last activity"
-                value={new Date(sessionMeta.updated_at).toLocaleString()}
+                value={formatDateTime(sessionMeta.updated_at)}
               />
             )}
           </div>

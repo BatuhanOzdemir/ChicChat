@@ -1,3 +1,4 @@
+import { ConfigForm } from "./config-form";
 import { getDatabase } from "@/db/client";
 import { loadMerchantConfig } from "@/db/config";
 import { listChannels } from "@/db/merchants";
@@ -81,7 +82,7 @@ export default async function ConfigPage({
 
       <ErrorBanner message={error} />
 
-      <div className="space-y-4">
+      <div key={merchantId} className="space-y-4">
         <PolicyForm settings={settings} />
 
         <section className="space-y-3">
@@ -96,7 +97,11 @@ export default async function ConfigPage({
         </section>
 
         <Card title="Add a category" tone="muted">
-          <form action={addCategory} className="flex flex-wrap items-end gap-3">
+          <ConfigForm
+            resetOnSuccess
+            action={addCategory}
+            className="flex flex-wrap items-end gap-3"
+          >
             <Field label="Label (any language)" width="w-64">
               <input className={input} name="label" required />
             </Field>
@@ -114,7 +119,7 @@ export default async function ConfigPage({
             <button type="submit" className={primaryButton}>
               Create category
             </button>
-          </form>
+          </ConfigForm>
         </Card>
       </div>
     </main>

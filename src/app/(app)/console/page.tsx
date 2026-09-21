@@ -88,7 +88,8 @@ export default async function ConsolePage({
         </div>
         {/* Cross-links to the other surfaces live in the nav bar. */}
         <p className="text-sm text-zinc-500">
-          {outstanding} case(s) outstanding
+          {outstanding} case(s) outstanding. Work the queue by priority and age,
+          update statuses, and add internal notes.
         </p>
       </header>
 

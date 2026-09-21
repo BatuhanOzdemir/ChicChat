@@ -31,8 +31,8 @@ import { logger } from "@/server/logging/logger";
  * Server actions for the taxonomy editor (SPEC §8).
  *
  * Every action validates its form at the boundary with a pure parser
- * (Handbook §5) and reports problems back to the page through a `?error=`
- * message rather than throwing at the user.
+ * (Handbook §5) and returns validation messages to the submitting form
+ * without navigating away or discarding other edits.
  */
 
 function values(formData: FormData): FormValues {
@@ -47,17 +47,24 @@ function id(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "");
 }
 
-/** Finish an action: report a problem, or refresh the editor. */
-function done(error?: string, merchantId?: string): never {
-  if (error) {
-    logger.warn("validation_failed", { merchantId, error });
-    redirect(`/config?error=${encodeURIComponent(error)}`);
-  }
-  revalidatePath("/config");
-  redirect("/config");
+export interface ConfigActionResult {
+  error?: string;
 }
 
-function reportWrite(result: WriteResult, merchantId: string): never {
+/** Refresh saved data in place, preserving unrelated form drafts. */
+function done(error?: string, merchantId?: string): ConfigActionResult {
+  if (error) {
+    logger.warn("validation_failed", { merchantId, error });
+    return { error };
+  }
+  revalidatePath("/config");
+  return {};
+}
+
+function reportWrite(
+  result: WriteResult,
+  merchantId: string,
+): ConfigActionResult {
   return result.ok ? done() : done(result.error, merchantId);
 }
 
@@ -69,50 +76,60 @@ function reportWrite(result: WriteResult, merchantId: string): never {
  */
 async function tenant(): Promise<string> {
   const merchantId = await currentMerchantId(getDatabase());
-  if (!merchantId) done("no merchant selected");
+  if (!merchantId) redirect("/login");
   return merchantId;
 }
 
-export async function savePolicy(formData: FormData): Promise<void> {
+export async function savePolicy(
+  formData: FormData,
+): Promise<ConfigActionResult> {
   const merchantId = await tenant();
   const parsed = parsePolicy(values(formData));
-  if (!parsed.ok) done(parsed.error, merchantId);
+  if (!parsed.ok) return done(parsed.error, merchantId);
   await updatePolicy(getDatabase(), merchantId, parsed.value);
-  done();
+  return done();
 }
 
-export async function addCategory(formData: FormData): Promise<void> {
+export async function addCategory(
+  formData: FormData,
+): Promise<ConfigActionResult> {
   const merchantId = await tenant();
   const parsed = parseNamed(values(formData), "category");
-  if (!parsed.ok) done(parsed.error, merchantId);
-  reportWrite(
+  if (!parsed.ok) return done(parsed.error, merchantId);
+  return reportWrite(
     await createCategory(getDatabase(), merchantId, parsed.value),
     merchantId,
   );
 }
 
-export async function saveCategory(formData: FormData): Promise<void> {
+export async function saveCategory(
+  formData: FormData,
+): Promise<ConfigActionResult> {
   const merchantId = await tenant();
   const parsed = parseNamed(values(formData), "category");
-  if (!parsed.ok) done(parsed.error, merchantId);
+  if (!parsed.ok) return done(parsed.error, merchantId);
   await updateCategory(getDatabase(), merchantId, id(formData, "id"), {
     label: parsed.value.label,
     sortOrder: parsed.value.sortOrder,
     enabled: formData.get("enabled") !== null,
   });
-  done();
+  return done();
 }
 
-export async function removeCategory(formData: FormData): Promise<void> {
+export async function removeCategory(
+  formData: FormData,
+): Promise<ConfigActionResult> {
   await deleteCategory(getDatabase(), await tenant(), id(formData, "id"));
-  done();
+  return done();
 }
 
-export async function addSubcategory(formData: FormData): Promise<void> {
+export async function addSubcategory(
+  formData: FormData,
+): Promise<ConfigActionResult> {
   const merchantId = await tenant();
   const parsed = parseNamed(values(formData), "subcategory");
-  if (!parsed.ok) done(parsed.error, merchantId);
-  reportWrite(
+  if (!parsed.ok) return done(parsed.error, merchantId);
+  return reportWrite(
     await createSubcategory(
       getDatabase(),
       merchantId,
@@ -123,16 +140,20 @@ export async function addSubcategory(formData: FormData): Promise<void> {
   );
 }
 
-export async function removeSubcategory(formData: FormData): Promise<void> {
+export async function removeSubcategory(
+  formData: FormData,
+): Promise<ConfigActionResult> {
   await deleteSubcategory(getDatabase(), await tenant(), id(formData, "id"));
-  done();
+  return done();
 }
 
-export async function addField(formData: FormData): Promise<void> {
+export async function addField(
+  formData: FormData,
+): Promise<ConfigActionResult> {
   const merchantId = await tenant();
   const parsed = parseField(values(formData));
-  if (!parsed.ok) done(parsed.error, merchantId);
-  reportWrite(
+  if (!parsed.ok) return done(parsed.error, merchantId);
+  return reportWrite(
     await createField(
       getDatabase(),
       merchantId,
@@ -143,29 +164,33 @@ export async function addField(formData: FormData): Promise<void> {
   );
 }
 
-export async function saveField(formData: FormData): Promise<void> {
+export async function saveField(
+  formData: FormData,
+): Promise<ConfigActionResult> {
   const merchantId = await tenant();
   const parsed = parseField(values(formData));
-  if (!parsed.ok) done(parsed.error, merchantId);
+  if (!parsed.ok) return done(parsed.error, merchantId);
   await updateField(
     getDatabase(),
     merchantId,
     id(formData, "id"),
     parsed.value,
   );
-  done();
+  return done();
 }
 
-export async function removeField(formData: FormData): Promise<void> {
+export async function removeField(
+  formData: FormData,
+): Promise<ConfigActionResult> {
   await deleteField(getDatabase(), await tenant(), id(formData, "id"));
-  done();
+  return done();
 }
 
-export async function addRule(formData: FormData): Promise<void> {
+export async function addRule(formData: FormData): Promise<ConfigActionResult> {
   const merchantId = await tenant();
   const parsed = parseRule(values(formData));
-  if (!parsed.ok) done(parsed.error, merchantId);
-  reportWrite(
+  if (!parsed.ok) return done(parsed.error, merchantId);
+  return reportWrite(
     await createRule(
       getDatabase(),
       merchantId,
@@ -176,7 +201,9 @@ export async function addRule(formData: FormData): Promise<void> {
   );
 }
 
-export async function removeRule(formData: FormData): Promise<void> {
+export async function removeRule(
+  formData: FormData,
+): Promise<ConfigActionResult> {
   await deleteRule(getDatabase(), await tenant(), id(formData, "id"));
-  done();
+  return done();
 }

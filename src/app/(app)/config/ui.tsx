@@ -1,6 +1,6 @@
 /**
- * Shared presentation bits for the taxonomy editor. Server components: the
- * editor is plain forms posting to server actions, so it needs no client JS.
+ * Shared server-rendered presentation for the taxonomy editor.
+ * ConfigForm handles in-place saves while these components supply the fields.
  */
 import type { ReactNode } from "react";
 

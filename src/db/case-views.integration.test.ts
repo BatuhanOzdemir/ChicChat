@@ -289,8 +289,7 @@ describe("counters (SPEC §8)", () => {
     await say(quiet, "list", "return");
     await say(quiet, "list", "doesnt_fit");
     await say(quiet, "list", "unworn_tags_on");
-    await sim("time_travel", quiet, { ageMinutes: 25 * 60 });
-    const swept = await sim("maintenance", quiet);
+    const swept = await sim("time_travel", quiet, { ageMinutes: 25 * 60 });
     expect(swept.notice).toContain("abandoned 1");
 
     const counters = await caseCounters(db, DEMO_MERCHANT_ID);

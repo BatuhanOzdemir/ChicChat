@@ -402,16 +402,11 @@ describe("the conversation transcript (SPEC §9)", () => {
     // At least one captured field, or the abandoned session is simply deleted
     // with nothing to file (SPEC §11).
     await say(phone, "text", "#tr-555 555");
-    await runSimulatorAction(db, {
+    const swept = await runSimulatorAction(db, {
       action: "time_travel",
       merchantId: DEMO_MERCHANT_ID,
       phone,
       ageMinutes: 25 * 60,
-    });
-    const swept = await runSimulatorAction(db, {
-      action: "maintenance",
-      merchantId: DEMO_MERCHANT_ID,
-      phone,
     });
     expect(swept.notice).toContain("abandoned 1");
 

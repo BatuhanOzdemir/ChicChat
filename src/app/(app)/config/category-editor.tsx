@@ -1,3 +1,4 @@
+import { ConfigForm } from "./config-form";
 import type { EditableCategory } from "@/db/config";
 import {
   addField,
@@ -17,6 +18,13 @@ import {
   PRIORITIES,
 } from "@/lib/config/forms";
 import { dangerButton, Field, input, smallButton } from "./ui";
+
+const FIELD_LABELS: Record<string, string> = {
+  string: "Free text",
+  enum: "Pick from a list",
+  media: "Photo",
+  ref: "Item description / reference",
+};
 
 export interface RuleRow {
   id: string;
@@ -60,7 +68,10 @@ export function CategoryEditor({
 
       <div className="mt-4 space-y-5">
         {/* Category itself */}
-        <form action={saveCategory} className="flex flex-wrap items-end gap-3">
+        <ConfigForm
+          action={saveCategory}
+          className="flex flex-wrap items-end gap-3"
+        >
           <input type="hidden" name="id" value={category.id} />
           <input type="hidden" name="key" value={category.key} />
           <Field label="Label" width="w-64">
@@ -89,7 +100,7 @@ export function CategoryEditor({
           <button type="submit" className={smallButton}>
             Save
           </button>
-        </form>
+        </ConfigForm>
 
         {/* Subcategories */}
         <div>
@@ -101,16 +112,17 @@ export function CategoryEditor({
               <li key={sub.key} className="flex items-center gap-2 text-sm">
                 <span>{sub.label}</span>
                 <code className="text-xs text-zinc-500">{sub.key}</code>
-                <form action={removeSubcategory} className="ms-auto">
+                <ConfigForm action={removeSubcategory} className="ms-auto">
                   <input type="hidden" name="id" value={sub.id} />
                   <button type="submit" className={dangerButton}>
                     Delete
                   </button>
-                </form>
+                </ConfigForm>
               </li>
             ))}
           </ul>
-          <form
+          <ConfigForm
+            resetOnSuccess
             action={addSubcategory}
             className="flex flex-wrap items-end gap-2"
           >
@@ -129,7 +141,7 @@ export function CategoryEditor({
             <button type="submit" className={smallButton}>
               Add
             </button>
-          </form>
+          </ConfigForm>
         </div>
 
         {/* Fields */}
@@ -137,17 +149,29 @@ export function CategoryEditor({
           <h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">
             Fields (asked in this order)
           </h3>
+          <p className="mb-3 text-xs text-zinc-500">
+            Free text lets customers write their answer. Pick from a list gives
+            them up to 10 choices to tap: enter one per line, for example Wrong
+            size, Poor quality, Other. Photo asks for an image; Item description
+            / reference asks which item they mean.
+          </p>
           <ul className="mb-2 space-y-2">
             {category.fields.map((field) => (
               <li key={field.id}>
-                <form
+                <ConfigForm
                   action={saveField}
                   className="flex flex-wrap items-end gap-2 rounded border border-zinc-100 p-2 dark:border-zinc-800"
                 >
                   <input type="hidden" name="id" value={field.id} />
                   <input type="hidden" name="key" value={field.key} />
-                  <span className="pb-1.5 font-mono text-xs">{field.key}</span>
-                  <Field label="Type" width="w-28">
+                  <Field label="Question label" width="w-48">
+                    <input
+                      className={input}
+                      name="label"
+                      defaultValue={field.label ?? field.key}
+                    />
+                  </Field>
+                  <Field label="Type" width="w-52">
                     <select
                       className={input}
                       name="type"
@@ -155,15 +179,16 @@ export function CategoryEditor({
                     >
                       {FIELD_TYPES.map((t) => (
                         <option key={t} value={t}>
-                          {t}
+                          {FIELD_LABELS[t]}
                         </option>
                       ))}
                     </select>
                   </Field>
-                  <Field label="Enum values (one per line)" width="w-56">
+                  <Field label="Choices (for Pick from a list)" width="w-56">
                     <textarea
                       className={input}
                       name="enum_values"
+                      placeholder={"Wrong size\nPoor quality\nOther"}
                       rows={2}
                       defaultValue={(field.enumValues ?? []).join("\n")}
                     />
@@ -201,32 +226,41 @@ export function CategoryEditor({
                   <button type="submit" className={smallButton}>
                     Save
                   </button>
-                </form>
-                <form action={removeField} className="mt-1">
+                </ConfigForm>
+                <ConfigForm action={removeField} className="mt-1">
                   <input type="hidden" name="id" value={field.id} />
                   <button type="submit" className={dangerButton}>
                     Delete {field.key}
                   </button>
-                </form>
+                </ConfigForm>
               </li>
             ))}
           </ul>
-          <form action={addField} className="flex flex-wrap items-end gap-2">
+          <ConfigForm
+            resetOnSuccess
+            action={addField}
+            className="flex flex-wrap items-end gap-2"
+          >
             <input type="hidden" name="category_id" value={category.id} />
             <Field label="New field label" width="w-44">
               <input className={input} name="label" required />
             </Field>
-            <Field label="Type" width="w-28">
+            <Field label="Type" width="w-52">
               <select className={input} name="type" defaultValue="string">
                 {FIELD_TYPES.map((t) => (
                   <option key={t} value={t}>
-                    {t}
+                    {FIELD_LABELS[t]}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="Enum values (one per line)" width="w-56">
-              <textarea className={input} name="enum_values" rows={2} />
+            <Field label="Choices (for Pick from a list)" width="w-56">
+              <textarea
+                className={input}
+                name="enum_values"
+                placeholder={"Wrong size\nPoor quality\nOther"}
+                rows={2}
+              />
             </Field>
             <Field label="Normalize" width="w-36">
               <select className={input} name="normalize_rule" defaultValue="">
@@ -253,7 +287,7 @@ export function CategoryEditor({
             <button type="submit" className={smallButton}>
               Add field
             </button>
-          </form>
+          </ConfigForm>
         </div>
 
         {/* Routing rules */}
@@ -283,16 +317,20 @@ export function CategoryEditor({
                     {JSON.stringify(rule.condition)}
                   </code>
                 </div>
-                <form action={removeRule} className="ms-auto">
+                <ConfigForm action={removeRule} className="ms-auto">
                   <input type="hidden" name="id" value={rule.id} />
                   <button type="submit" className={dangerButton}>
                     Delete
                   </button>
-                </form>
+                </ConfigForm>
               </li>
             ))}
           </ul>
-          <form action={addRule} className="flex flex-wrap items-end gap-2">
+          <ConfigForm
+            resetOnSuccess
+            action={addRule}
+            className="flex flex-wrap items-end gap-2"
+          >
             <input type="hidden" name="category_id" value={category.id} />
             <Field label="Rule name" width="w-40">
               <input className={input} name="label" />
@@ -367,10 +405,10 @@ export function CategoryEditor({
             <button type="submit" className={smallButton}>
               Add rule
             </button>
-          </form>
+          </ConfigForm>
         </div>
 
-        <form
+        <ConfigForm
           action={removeCategory}
           className="border-t pt-3 dark:border-zinc-800"
         >
@@ -378,7 +416,7 @@ export function CategoryEditor({
           <button type="submit" className={dangerButton}>
             Delete category “{category.label}”
           </button>
-        </form>
+        </ConfigForm>
       </div>
     </details>
   );

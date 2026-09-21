@@ -1,3 +1,4 @@
+import { ConfigForm } from "./config-form";
 import type { MerchantSettings } from "@/db/config";
 import { savePolicy } from "./actions";
 import { Card, Field, input, primaryButton } from "./ui";
@@ -6,7 +7,12 @@ import { Card, Field, input, primaryButton } from "./ui";
 export function PolicyForm({ settings }: { settings: MerchantSettings }) {
   return (
     <Card title="Policy">
-      <form action={savePolicy} className="space-y-3">
+      <p className="mb-3 text-xs text-zinc-500">
+        Save policy to apply these settings. Editing categories keeps your
+        unsaved policy changes here. Order numbers follow your store’s pattern;
+        TR is only used in demo examples.
+      </p>
+      <ConfigForm action={savePolicy} className="space-y-3">
         <div className="flex flex-wrap gap-4">
           <Field label="Return window (days)" width="w-40">
             <input
@@ -74,7 +80,7 @@ export function PolicyForm({ settings }: { settings: MerchantSettings }) {
         <button type="submit" className={primaryButton}>
           Save policy
         </button>
-      </form>
+      </ConfigForm>
     </Card>
   );
 }

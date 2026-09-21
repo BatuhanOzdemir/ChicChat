@@ -9,6 +9,9 @@ interface ControlPanelProps {
   merchantId: string;
   phone: string;
   busy: boolean;
+  presetRunning: boolean;
+  onStopPreset: () => void;
+  onRefresh: () => void;
   injectError: SimulatorErrorInjection | "";
   onMerchantChange: (id: string) => void;
   onPhoneChange: (phone: string) => void;
@@ -29,6 +32,9 @@ export function ControlPanel({
   merchantId,
   phone,
   busy,
+  presetRunning,
+  onStopPreset,
+  onRefresh,
   injectError,
   onMerchantChange,
   onPhoneChange,
@@ -53,6 +59,7 @@ export function ControlPanel({
         <label className="block text-xs text-zinc-500">
           Merchant
           <select
+            disabled={busy}
             value={merchantId}
             onChange={(e) => onMerchantChange(e.target.value)}
             className={field}
@@ -68,6 +75,7 @@ export function ControlPanel({
         <label className="block text-xs text-zinc-500">
           Customer phone (fake)
           <input
+            disabled={busy}
             value={phone}
             onChange={(e) => onPhoneChange(e.target.value)}
             className={field}
@@ -100,6 +108,18 @@ export function ControlPanel({
 
       <div className="space-y-2">
         <h2 className="font-medium">Presets</h2>
+        <p className="text-xs text-zinc-500">
+          Demo scenarios use sample order numbers. If a choice is rejected, the
+          preset pauses so you can answer manually.
+        </p>
+        <button
+          type="button"
+          className={button}
+          disabled={!presetRunning}
+          onClick={onStopPreset}
+        >
+          Stop preset
+        </button>
         <ul className="space-y-1">
           {PRESETS.map((preset) => (
             <li key={preset.id}>
@@ -151,7 +171,7 @@ export function ControlPanel({
               disabled={busy}
               onClick={() => onTimeTravel(minutes)}
             >
-              ⏩ age {minutes < 60 ? `${minutes}m` : `${minutes / 60}h`}
+              ⏩ age {minutes < 60 ? `${minutes}m` : `${minutes / 60}h`} & check
             </button>
           ))}
         </div>
@@ -168,11 +188,19 @@ export function ControlPanel({
 
       <button
         type="button"
+        className={button}
+        disabled={busy}
+        onClick={onRefresh}
+      >
+        Refresh session
+      </button>
+      <button
+        type="button"
         onClick={onReset}
         disabled={busy}
         className="w-full rounded bg-zinc-900 px-3 py-2 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
       >
-        Reset session &amp; transcript
+        End conversation &amp; reset
       </button>
     </section>
   );

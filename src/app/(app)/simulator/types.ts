@@ -9,6 +9,8 @@ export interface TranscriptEntry {
   options?: ListRow[];
   /** Renders as a photo bubble rather than plain text. */
   isPhoto?: boolean;
+  /** Inactivity notifications do not replace the question awaiting an answer. */
+  notification?: boolean;
 }
 
 export interface MerchantOption {

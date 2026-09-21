@@ -13,6 +13,7 @@ import { ChatPanel } from "./chat-panel";
 import { ControlPanel } from "./control-panel";
 import { InspectorPanel } from "./inspector-panel";
 import type { Preset } from "./presets";
+import { playPreset } from "./run-preset";
 import type { MerchantOption, TranscriptEntry } from "./types";
 
 const DEFAULT_PHONE = "905550000001";
@@ -52,6 +53,8 @@ export function SimulatorClient({
   );
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const stopRef = useRef(false);
+  const [presetRunning, setPresetRunning] = useState(false);
   const injectionRef = useRef<SimulatorErrorInjection | "">("");
 
   const rtl = merchants.find((m) => m.id === merchantId)?.rtl ?? false;
@@ -69,6 +72,7 @@ export function SimulatorClient({
     ): Promise<SimulatorResponse | null> => {
       const res = await fetch("/api/simulator", {
         method: "POST",
+        signal: AbortSignal.timeout(30_000),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ merchantId, phone, ...body }),
       });
@@ -82,7 +86,12 @@ export function SimulatorClient({
       setError(data.error);
       setNotice(data.notice);
       if (data.completedCase) setCompletedCase(data.completedCase);
-      for (const message of data.outbound ?? []) push(bubbleFor(message));
+      for (const message of data.outbound ?? [])
+        push({
+          ...bubbleFor(message),
+          notification:
+            body.action === "maintenance" || body.action === "time_travel",
+        });
       if (data.error) push({ role: "system", text: `⚠ ${data.error}` });
       return data;
     },
@@ -137,6 +146,10 @@ export function SimulatorClient({
     setBusy(true);
     try {
       await fn();
+    } catch {
+      setError(
+        "The request could not finish. Refresh the session before retrying; it may already have been processed.",
+      );
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -145,38 +158,24 @@ export function SimulatorClient({
 
   const runPreset = useCallback(
     async (preset: Preset) => {
+      stopRef.current = false;
+      setPresetRunning(true);
       setTranscript([]);
       setCompletedCase(null);
-      await call({ action: "reset" });
-
-      const replayId = `wamid.sim.replay.${Date.now()}`;
-      const greeting: SimulatorMessageInput = {
-        kind: "text",
-        value: preset.greeting,
-        ...(preset.replayGreeting ? { messageId: replayId } : {}),
-      };
-      let last = await send(greeting);
-      if (preset.replayGreeting) {
-        push({ role: "system", text: "↻ replaying the same message id…" });
-        last = await send(greeting, `${preset.greeting} (replay)`);
-      }
-      if (preset.category)
-        last = await send({ kind: "list", value: preset.category });
-      if (preset.subcategory)
-        last = await send({ kind: "list", value: preset.subcategory });
-
-      for (let i = 0; i < 12; i++) {
-        const pending = last?.session?.pendingFieldKey;
-        if (!pending) break;
-        const answer = preset.answers?.[pending];
-        if (!answer) {
+      try {
+        await playPreset(preset, {
+          reset: () => call({ action: "reset" }),
+          send,
+          stopped: () => stopRef.current,
+          notify: (text) => push({ role: "system", text }),
+        });
+      } finally {
+        setPresetRunning(false);
+        if (stopRef.current)
           push({
             role: "system",
-            text: `preset has no answer for "${pending}" — stopping`,
+            text: "Preset stopped. The last request may have finished. Continue manually or reset the conversation.",
           });
-          break;
-        }
-        last = await send(answer);
       }
     },
     [call, push, send],
@@ -185,6 +184,7 @@ export function SimulatorClient({
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <ChatPanel
+        active={session !== null}
         transcript={transcript}
         busy={busy}
         rtl={rtl}
@@ -204,6 +204,16 @@ export function SimulatorClient({
           merchantId={merchantId}
           phone={phone}
           busy={busy}
+          presetRunning={presetRunning}
+          onStopPreset={() => {
+            stopRef.current = true;
+            setNotice("Stopping after the current request finishes…");
+          }}
+          onRefresh={() =>
+            void guard(async () => {
+              await call({ action: "state" });
+            })
+          }
           injectError={injectError}
           onMerchantChange={changeMerchant}
           onPhoneChange={setPhone}

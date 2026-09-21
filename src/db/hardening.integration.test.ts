@@ -123,8 +123,7 @@ describe("session inactivity (SPEC §11)", () => {
     expect(sentTo(await sim("maintenance", phone), phone)).toEqual([]);
 
     // Age past nudge_after_minutes (default 5) and run the job.
-    await sim("time_travel", phone, { ageMinutes: 6 });
-    const nudged = await sim("maintenance", phone);
+    const nudged = await sim("time_travel", phone, { ageMinutes: 6 });
     const nudge = sentTo(nudged, phone)[0];
     if (nudge?.type !== "text") throw new Error("expected a nudge text");
     expect(nudge.text.body).toMatch(/pick up|left off/i);
@@ -155,8 +154,7 @@ describe("session inactivity (SPEC §11)", () => {
     expect((statusRows[0] as { status: string }).status).toBe("active");
 
     // Age past abandon_after_hours (default 24): the work becomes a case.
-    await sim("time_travel", phone, { ageMinutes: 25 * 60 });
-    const abandoned = await sim("maintenance", phone);
+    const abandoned = await sim("time_travel", phone, { ageMinutes: 25 * 60 });
     expect(abandoned.notice).toContain("abandoned 1");
     expect(await loadSession(db, DEMO_MERCHANT_ID, phone)).toBeNull();
 
@@ -173,9 +171,9 @@ describe("session inactivity (SPEC §11)", () => {
     await sim("message", emptyPhone, {
       message: { kind: "text", value: "hi" },
     });
-    await sim("time_travel", emptyPhone, { ageMinutes: 25 * 60 });
-
-    const result = await sim("maintenance", emptyPhone);
+    const result = await sim("time_travel", emptyPhone, {
+      ageMinutes: 25 * 60,
+    });
     expect(result.notice).toContain("deleted 1");
     const { rows } = await client.query(
       `select count(*)::int as n from cases where customer_wa_id = $1`,
@@ -194,10 +192,12 @@ describe("session inactivity (SPEC §11)", () => {
     await sim("time_travel", slowPhone, { ageMinutes: 10 });
     expect(sentTo(await sim("maintenance", slowPhone), slowPhone)).toEqual([]);
 
-    await sim("time_travel", slowPhone, { ageMinutes: 55 });
-    expect(sentTo(await sim("maintenance", slowPhone), slowPhone)).toHaveLength(
-      1,
-    );
+    expect(
+      sentTo(
+        await sim("time_travel", slowPhone, { ageMinutes: 55 }),
+        slowPhone,
+      ),
+    ).toHaveLength(1);
   });
 
   it("keeps sweeping when one conversation fails (Step 7)", async () => {
