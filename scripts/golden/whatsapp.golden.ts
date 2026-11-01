@@ -12,7 +12,10 @@ import { advance, startIntake } from "@/lib/intake";
 import type { IntakeSession } from "@/lib/intake";
 import { demoIntakeConfig } from "@/lib/intake/fixtures";
 import { buildInboundEnvelope } from "@/lib/simulator/envelope";
-import { parseSimulatorRequest } from "@/lib/simulator/protocol";
+import {
+  parseSimulatorRequest,
+  type SimulatorInputKind,
+} from "@/lib/simulator/protocol";
 import { maskPhone, redactLog, redactText } from "@/lib/logging/mask";
 import { gateDecision, isOpenPath, safeNextPath } from "@/lib/auth/gate";
 import { activeSection } from "@/lib/nav";
@@ -273,7 +276,7 @@ it("records whatsapp, simulator, mask, gate", () => {
       r.call(
         "buildInboundEnvelope",
         buildInboundEnvelope,
-        { kind, value },
+        { kind: kind as SimulatorInputKind, value },
         { phoneNumberId: "SIM", from: "905", messageId: "w1" },
       );
       r.call("parseInbound", parseInbound, env);

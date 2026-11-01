@@ -463,6 +463,9 @@ Add items here as they are found; each becomes its own change after the port.
   detail page, and similar "v0.2" comments (noted in v0.3 Step 0).
 - Comment in `supabase/migrations/20260729120000_agent_console.sql` still points
   to the deleted `docs/RETROFIT.md` (migrations are not edited).
+- The TypeScript CI job failed from Port Step 1 until Step 6 because two
+  deliberately invalid golden-exporter inputs did not type-check; fixed in
+  Step 6 with explicit casts (no behaviour or golden output changed).
 - `parseInbound` crashes on a `null` entry, change or message (`null.changes`
   throws in JavaScript); the webhook then answers 500 and Meta retries the same
   payload. The Python port reproduces this exactly; fix both in one change.
@@ -506,3 +509,4 @@ Updated at the end of every port step, so work can resume from here.
 | Port Steps 2–3 | ✓ | `chicchat/db` (SQL verbatim), `chicchat/server` (handler, inbox, outbox, maintenance, simulator, logger, env), scripts (seed, console_user, prepare_test_db). All 12 DB test files ported: **153/153 DB tests**, matching the TypeScript count, passing on local PostgreSQL 16, including the threaded concurrency gates. Python seed output identical to the TypeScript seed. Simulator preset rule moved to `domain/simulator/presets.py` (browser only loops). |
 | Port Step 4 | ✓ | FastAPI app (`chicchat/web`): 5 API routes + simulator preset-step, login gate middleware, sign-in/out, boot check, background inbox processing, CSRF (double-submit token + Origin check, enforced on every state-changing route by a test). 35 HTTP tests (every row of §2, P1 production default, P2 raw-byte signatures, P4) + 2 DB-backed sign-in tests. |
 | Port Step 5 | ✓ | All operator pages as Jinja2 templates (same Tailwind classes; CSS built with Tailwind 4.3.1 into `static/app.css`): login, home, cases + detail, console + detail with status/note actions, configuration editor, simulator. Two commented scripts: `config.js` (in-place saves that keep other sections' unsaved drafts) and `simulator.js` (chat UI; presets ask the server for each step). Browser walkthrough `tests/browser/` (`pytest -m browser`): 6/6, stable across reruns — presets in three categories, private photo evidence, delivery failure + retry, nudge/abandon with choices staying tappable, custom choice field end to end with drafts preserved, filters and console status change. DB-backed page tests prove another merchant's case and photo are 404s. |
+| Port Step 6 | ✓ | `python -m chicchat.web` launcher (access log off), local `scripts.migrate`; CI runs ruff, mypy, import-linter, unit, DB (157) and browser (6) tests on PostgreSQL 17; README, DEPLOYMENT, Handbook §§1–5 and the CLAUDE.md Definition of Done describe the Python app. Gate verified on a fresh database: migrate (idempotent), seed twice (identical rows), launch, intake completes through the simulator API, no access-log lines. TypeScript job kept until Step 7 removes `src/`. |

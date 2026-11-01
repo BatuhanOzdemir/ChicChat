@@ -158,7 +158,12 @@ it("records cases", () => {
       priority: "URGENT!",
     },
     { condition: { all: [] }, action_type: "auto_reply" },
-    { condition: { bogus: 1 }, action_type: "route", target_queue: "x" },
+    // Deliberately invalid stored condition: evaluation must treat it as no match.
+    {
+      condition: { bogus: 1 } as unknown as LabelledRule["condition"],
+      action_type: "route",
+      target_queue: "x",
+    },
   ];
   for (const sub of ["damaged", "item_missing", "wrong_item"])
     for (const fields of [

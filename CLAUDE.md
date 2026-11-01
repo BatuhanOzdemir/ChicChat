@@ -20,8 +20,10 @@ product behaviour; the Handbook wins on engineering standards.
    with user-visible behaviour must be demonstrable in the simulator, and each
    step extends the simulator with whatever controls its features need
    (SPEC §7). "Works but can't be shown in the simulator" fails the gate.
-7. Definition of Done per step: gate ✓ · lint ✓ · typecheck ✓ · tests ✓ ·
-   Handbook standards respected · committed · report posted · sign-off received.
+7. Definition of Done per step: gate ✓ · lint ✓ (`ruff`) · typecheck ✓ (`mypy`)
+   · architecture ✓ (`lint-imports`) · tests ✓ (`pytest`, `-m db`, `-m browser`
+   when pages change) · Handbook standards respected · committed · report
+   posted · sign-off received. All commands run in `python/` (see README).
 
 ### Step report template
 ```
@@ -53,7 +55,9 @@ Awaiting sign-off for Step N+1.
   The user confirmed Python + FastAPI and the hosting direction on 2026-11-01
   and **authorized running Port Steps 0–6 without per-step sign-off**; Port
   Step 7 (staging, cutover, removal of TypeScript) needs sign-off again.
-  Progress is tracked in `docs/PORT.md` §10.
+  Progress is tracked in `docs/PORT.md` §10. Port Steps 0–6 are complete
+  (Python app in `python/`); Port Step 7 (staging, cutover, removing the
+  TypeScript) is next and needs sign-off before it starts.
 
 ---
 

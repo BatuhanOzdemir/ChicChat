@@ -63,6 +63,7 @@ jobs:
       - run: uv run lint-imports
       - run: uv run pytest
       - run: uv run python -m chicchat.scripts.prepare_test_db
-        if: hashFiles('python/chicchat/scripts/prepare_test_db.py') != ''
       - run: uv run pytest -m db
-        if: hashFiles('python/chicchat/scripts/prepare_test_db.py') != ''
+      # Template smoke test: every page renders in the browser walkthrough.
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest -m browser
