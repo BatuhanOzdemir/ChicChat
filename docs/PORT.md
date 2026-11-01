@@ -479,6 +479,12 @@ Add items here as they are found; each becomes its own change after the port.
   `\D`/`\W`/`\S` use Python's ASCII mode, so `[\S]` treats non-ASCII spaces
   (e.g. U+00A0) as non-space. Patterns Python cannot compile are rejected by
   the editor; check stored patterns before cutover (P9).
+- **Credentials:** `server/auth/credentials.ts` became `domain/auth/credentials.py`
+  (pure computation; the Python layer rule forbids db → server imports).
+- **Simulator presets:** `presets.ts` and the playback rule of `run-preset.ts`
+  live in `domain/simulator/presets.py`; the browser asks the server for each
+  next step and only handles looping and Stop. The three `available-options`
+  unit tests (which bubbles stay tappable) become browser checks in Step 5.
 - **Classifier hand-off:** a `null` value in `pendingInitial` is skipped instead
   of crashing (nothing writes one yet; v0.3 will).
 
@@ -493,3 +499,4 @@ Updated at the end of every port step, so work can resume from here.
 | Baseline | ✓ | TypeScript: 195 unit tests, 153 DB tests pass on local PostgreSQL 16 (2026-11-01) |
 | Port Step 0 | ✓ | `python/` skeleton (uv, ruff, mypy strict, pytest, import-linter contracts for domain purity and layers), Python CI job, golden exporter (`scripts/golden/`) and comparison helper (`python/tests/golden.py`) |
 | Port Step 1 | ✓ | `chicchat/domain` complete: normalize, rules, intake, cases, config, whatsapp, simulator, logging, auth, nav. 175/175 TypeScript domain tests ported (by name, checked by script) plus 19 extra; golden comparisons over ~25,000 recorded TypeScript calls match exactly. `jscompat.py`/`dates.py` hold the JavaScript semantics. |
+| Port Steps 2–3 | ✓ | `chicchat/db` (SQL verbatim), `chicchat/server` (handler, inbox, outbox, maintenance, simulator, logger, env), scripts (seed, console_user, prepare_test_db). All 12 DB test files ported: **153/153 DB tests**, matching the TypeScript count, passing on local PostgreSQL 16, including the threaded concurrency gates. Python seed output identical to the TypeScript seed. Simulator preset rule moved to `domain/simulator/presets.py` (browser only loops). |

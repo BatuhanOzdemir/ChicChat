@@ -70,3 +70,22 @@ def db(conn: psycopg.Connection[Any], seeded: None) -> Iterator[ConnectionDataba
         yield database
     finally:
         conn.execute("rollback")
+
+
+@pytest.fixture(scope="module")
+def pool_db() -> Iterator[Any]:
+    """Independent pooled connections, for the tests that commit and race."""
+    from psycopg_pool import ConnectionPool
+
+    from chicchat.db.client import PoolDatabase
+
+    pool: ConnectionPool[Any] = ConnectionPool(
+        database_url(),
+        kwargs={"autocommit": True, "prepare_threshold": None},
+        configure=configure_connection,
+        min_size=1,
+        max_size=8,
+        open=True,
+    )
+    yield PoolDatabase(pool)
+    pool.close()

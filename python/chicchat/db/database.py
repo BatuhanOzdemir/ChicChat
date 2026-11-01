@@ -95,8 +95,12 @@ class ConnectionDatabase:
             yield self
 
 
-def client_database(tx: Queryable) -> ConnectionDatabase:
-    """The Database view of a transaction handle (TypeScript `clientDatabase`)."""
-    if isinstance(tx, ConnectionDatabase):
-        return tx
-    raise TypeError("client_database needs a ConnectionDatabase")
+def client_database(tx: Queryable) -> Database:
+    """The Database view of a transaction handle (TypeScript `clientDatabase`).
+
+    Transaction handles in this codebase already support nested transactions
+    (savepoints), so this only checks and passes them through.
+    """
+    if callable(getattr(tx, "transaction", None)):
+        return tx  # type: ignore[return-value]
+    raise TypeError("client_database needs a handle that supports transaction()")
