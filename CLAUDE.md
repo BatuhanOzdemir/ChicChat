@@ -1,9 +1,4 @@
-# CLAUDE.md — Working Agreement & v0.2 Build Plan
-
-September 2026 continuation: see `docs/DEVELOPMENT-LOG.md` §§15–16 for the
-user-authorized repair batch after the review and its follow-up fixes.
-The user authorized executing that complete batch without per-step pauses.
-The v0.2 milestones below remain the historical plan; Steps 9–10 remain deferred.
+# CLAUDE.md — Working Agreement & v0.3 Build Plan
 
 `docs/SPEC.md` = WHAT to build (source of truth for product behaviour).
 `docs/ENGINEERING-HANDBOOK.md` = lasting engineering standards.
@@ -40,94 +35,75 @@ Awaiting sign-off for Step N+1.
 
 ---
 
-## v0.2 build plan
+## Where we are
 
-### Step 0 — Docs restructure & retrofit audit
-- **Build:** move new SPEC.md and ENGINEERING-HANDBOOK.md into `docs/`; replace
-  old CLAUDE.md with this file; delete superseded addition files. Add
-  `npm run typecheck` (`tsc --noEmit`). Audit existing code against the
-  Handbook; produce `docs/RETROFIT.md` listing every violation (no fixes yet).
-- **Gate:** three docs in place; typecheck script runs; RETROFIT.md lists
-  findings with file references.
+- **v0.2** (Steps 0–8) is complete; the step-by-step record is in
+  `docs/DEVELOPMENT-LOG.md` §7, and the September 2026 repair batch and its
+  follow-up fixes are §§15–16.
+- **Dropped for now (November 2026):** the old v0.2 Steps 9–10 — the İkas
+  connector and the live item-picker Flow. No commerce integration is in scope;
+  Tier 0 is the only tier. Dev log §8 records what resuming them would need.
+- **Meta/WhatsApp:** keep the existing integration working, but no new Meta
+  work (Flows, templates, new message types) unless we agree it first. All v0.3
+  behaviour is built and demonstrated in the simulator.
+- The old rule that v0.3 waits for a real-merchant demo is **dropped**.
 
-### Step 1 — Chat simulator (SPEC §7)
-- **Build:** `/simulator` route (dev-only or auth-gated): WhatsApp-like chat UI;
-  merchant + fake-phone selector; injects synthetic messages into the real
-  handler (signature bypass only); supports text, list taps, fake photo, fake
-  Flow payloads; side panel with live session state and final case JSON; reset;
-  preset scenarios; error injection and session time-travel hooks (SPEC §7) —
-  this is the permanent test bench all later gates run on.
-- **Gate:** intakes for at least three different categories completed entirely
-  in the simulator, including the messy-order-number preset; case JSON visible
-  and correct each time; no Meta credentials configured anywhere.
+---
 
-### Step 2 — Hardening & unexpected-error handling (SPEC §§10–13)
-- **Build:** idempotency by message ID; transactional persistCase; session
-  inactivity handling per SPEC §11 — nudge at `nudge_after_minutes` (default 5),
-  abandon at `abandon_after_hours` (default 24), both merchant-configurable,
-  progress never discarded early; cleanup job; boundary validation; structured
-  JSON logging; top-level handler catch → generic customer message, `errored`
-  session state, correlated log (SPEC §13 last row).
-- **Gate:** tests prove: duplicate replay = single effect; kill-mid-persist
-  leaves no partial case; simulator time-travel shows the nudge at 5 min, a
-  post-nudge reply resuming with all fields intact, and abandonment at the
-  configured horizon; a thrown error inside the machine produces the generic
-  reply + errored session + one structured log line.
+## v0.3 build plan — AI-assisted intake (SPEC §17)
 
-### Step 3 — Merchant taxonomy editor, full CRUD (SPEC §8)
-- **Build:** upgrade config UI from toggles to full CRUD: categories,
-  subcategories, fields (incl. required + enum values), routing rules; policy
-  settings incl. KVKK URL + retention. Defaults pre-loaded per merchant.
-- **Gate:** in the simulator, create a brand-new custom category with a custom
-  enum field via the UI and complete an intake using it end-to-end; disable a
-  default category and verify it disappears from the menu.
+### Step 0 — Docs for v0.3
+- **Build:** record the scope decisions above; replace the v0.2 plan in this
+  file with the v0.3 plan; update SPEC (scope, AI-assisted intake section,
+  failure rows, İkas/Flow marked out of scope).
+- **Gate:** CLAUDE.md, SPEC, README and the dev log agree; nothing still
+  presents İkas, the live Flow or the merchant-demo rule as current plan.
 
-### Step 4 — Case persistence upgrade & merchant case views (SPEC §8)
-- **Build:** case list (filters: status/category/date/order number), case detail
-  (raw+normalized fields, items, photos, timeline, abandoned + errored states),
-  basic analytics counters (by category/status/day, median intake time,
-  abandonment rate).
-- **Gate:** cases generated via simulator appear correctly in list, filters,
-  detail, and counters; an abandoned and an errored session both surface.
+### Step 1 — Test set & scoring tool
+- **Build:** a versioned file of sample customer first messages and free-text
+  answers (English and Turkish, synthetic to start; the user adds real Turkish
+  examples) with the expected category, subcategory, fields and choice; a script
+  that scores any classifier against it (per-category accuracy, field accuracy,
+  how often it wrongly claims high confidence).
+- **Gate:** the script runs and scores a fake classifier; output is readable;
+  adding an example needs no code change.
 
-### Step 5 — Agent case console (SPEC §9, minimal)
-- **Build:** queue view (priority/age, queue/category filters); case detail with
-  handoff package + read-only transcript; status transitions; internal notes.
-- **Gate:** simulator-generated case flows open → in_progress → resolved with a
-  note; routing rules land cases in the right queues.
+### Step 2 — AI connection, masking & merchant switch
+- **Build:** one classifier interface with a fake for tests and a real provider
+  behind it (provider and model chosen in this step — bring a recommendation
+  with costs); phone numbers and order numbers replaced with placeholders
+  before anything leaves the server (order numbers still extracted locally by
+  the existing normalizer); per-merchant on/off setting in the configuration
+  screen, **off by default**; timeout, provider errors and invalid responses
+  fall back to the menus with one structured log line; API key as an env var.
+- **Gate:** tests prove no unmasked phone or order number is ever sent, the
+  switch works per merchant, and every failure path falls back to the menus;
+  the simulator can force the AI to time out or fail.
 
-### Step 6 — Multi-tenancy seam
-- **Build:** merchant resolution by phone_number_id (replace demo hardcode);
-  merchant-scoped everything; simulator gains merchant switching.
-- **Gate:** two merchants with different taxonomies; interleaved simulator
-  conversations produce correctly scoped sessions/cases; cross-tenant leakage
-  test passes.
+### Step 3 — First-message classification with confirmation
+- **Build:** on a new conversation's first free-text message (switch on), the
+  model proposes category, subcategory and fields with confidence. Confident →
+  one Yes/No confirmation; Yes fills the confirmed values through the existing
+  `startIntake` initial-fields path and skips those questions; No or low
+  confidence → the normal menus. The simulator side panel shows the proposal.
+- **Gate:** in the simulator, a first message containing an order number skips
+  to the remaining questions after Yes; No shows the menus; with the switch
+  off, behaviour is identical to v0.2.
 
-### Step 7 — Deployment
-- **Build:** deploy to Vercel (or equivalent) + hosted Supabase; env-var
-  secrets; migrations against hosted DB; simulator auth-gated in prod.
-- **Gate:** deployed simulator completes a full intake against the hosted DB;
-  tests green against hosted config.
+### Step 4 — Free-text answers mapped to choices, with confirmation
+- **Build:** when a typed answer to a choice field matches no listed value, the
+  model proposes the closest one ("Wrong size?" Yes/No); Yes records it, No
+  re-shows the list. The list is still always shown (SPEC §5).
+- **Gate:** the "it doesn't fit" and "too tight" conversations from dev log §16
+  complete in the simulator without loops.
 
-### Step 8 — Meta re-wiring (staging)
-- **Build:** point Meta test-number webhook at the deployed URL; KVKK line on
-  first message; verify signature path in production mode.
-- **Gate:** real WhatsApp message to the test number round-trips through the
-  deployed app; duplicate-delivery replay test passes in deployed environment.
+### Step 5 — Visibility & accuracy
+- **Build:** case detail and console mark which values the AI proposed and the
+  customer confirmed; analytics show the AI acceptance rate; the scoring script
+  runs against the real provider on the full test set.
+- **Gate:** marks and acceptance rate visible for simulator cases; accuracy on
+  the test set meets the minimum agreed after Step 1.
 
-### Step 9 — İkas connector (SPEC §14)
-- **Build:** private-app credential entry in merchant console; client_credentials
-  token fetch + 4h refresh (cached per merchant); getOrder via GraphQL against a
-  free İkas dev store; tier flip to 1; Tier-0 degradation on unavailability.
-- **Gate:** token expiry simulation passes; dev-store order returns line items;
-  integration-down simulation degrades per SPEC §13.
-
-### Step 10 — Item-picker Flow (SPEC §6)
-- **Build:** data-exchange endpoint (RSA-2048), order caching at ORDER_NUMBER,
-  SELECT_ITEMS from live İkas dev-store order, selections → case_items. Simulator
-  fake-Flow payloads already cover the logic; this step is the real Meta wiring.
-- **Gate:** in WhatsApp (test number), a customer picks real items from a real
-  dev-store order; case records correct line-item ids.
-
-**→ v0.2 complete. v0.3 (LLM classify/extract) begins only after sign-off and a
-demo session with at least one real merchant.**
+**→ v0.3 complete after Step 5 sign-off.** Open decisions: provider/model
+(Step 2); the confidence level that triggers a suggestion and the accuracy
+minimum (after Step 1); fuller KVKK treatment of AI processing (later stage).
