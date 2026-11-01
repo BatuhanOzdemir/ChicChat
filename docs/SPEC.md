@@ -1,4 +1,4 @@
-# ChicChat — Product Specification (v0.2)
+# ChicChat — Product Specification (v0.3)
 
 WhatsApp-native structured-intake and triage for apparel merchants. The bot turns a
 messy customer complaint into a clean, structured case; agents resolve cases faster;
@@ -23,12 +23,17 @@ handoff to humans. Phase 2 (future): autonomous resolution of routine cases.
 - **Merchant admin** — configures taxonomy, policies, integrations; watches volume.
 - **Developer (Batuhan + Claude Code)** — needs a fast local loop without Meta.
 
-## 3. v0.2 scope at a glance
+## 3. Scope at a glance
 
-IN: chat simulator (dev/test UI) · merchant-defined taxonomy via UI (full CRUD) ·
-hardened error handling (SPEC §13) · minimal agent case console · merchant case
-views · basic analytics counters · KVKK basics · multi-tenancy seam.
-OUT (deferred): LLM classify/extract (v0.3) · user-defined SLA engine (v0.4) ·
+DELIVERED (v0.2): chat simulator (dev/test UI) · merchant-defined taxonomy via UI
+(full CRUD) · hardened error handling (§13) · minimal agent case console ·
+merchant case views · basic analytics counters · KVKK basics · multi-tenancy seam.
+IN (v0.3): AI-assisted intake (§17) — first-message classification and
+free-text-to-choice mapping, both confirmed by the customer · masking before
+any AI call · per-merchant on/off switch · test set and accuracy scoring.
+OUT: İkas and other commerce integrations, and the live item-picker Flow
+(dropped for now, November 2026 — §§6, 14) · new Meta work beyond keeping the
+existing integration running · user-defined SLA engine (v0.4) ·
 agent-to-customer messaging inside ChicChat · Admin App store packaging ·
 autonomous resolution (Phase 2).
 
@@ -48,11 +53,15 @@ Field types: string · enum · media(photo) · ref(item) · computed. Normalizat
 runs on capture (core IP): order_number cleaning (strip `/ # spaces`, leading
 zeros, uppercase, merchant regex validation; keep raw + normalized), enum
 constraint, item fuzzy-match at Tier 0. **Enum fields must always render as
-tappable lists/buttons, never free-text questions.**
+tappable lists/buttons, never free-text questions.** A customer who types an
+answer instead of tapping may be offered the closest listed value to confirm
+(§17); the list itself is always shown.
 
 ## 6. Conversation layer
 
 - Static List Messages: category/subcategory menus (≤10 rows).
+- *Not in current scope (needs an order integration, §14): the two Flow items
+  below. Simulated Flow payloads remain in the simulator.*
 - Dynamic WhatsApp Flow (data-exchange): order-item picker for categories 2/3/5,
   exchange variant picker, live refund status. RSA-2048 encryption; cache order at
   ORDER_NUMBER step; screens: ORDER_NUMBER → SELECT_ITEMS → REASON → [PHOTO] →
@@ -62,7 +71,7 @@ tappable lists/buttons, never free-text questions.**
   approved templates + opt-in.
 - First message of any new conversation includes the KVKK disclosure line.
 
-## 7. Chat simulator (NEW — the core of v0.2)
+## 7. Chat simulator (introduced in v0.2)
 
 The permanent test bench for the whole product — not a single-scenario tool. It
 removes Meta from the development loop entirely and remains part of the product:
@@ -84,7 +93,9 @@ simulator gains whatever controls are needed to exercise them.
 - Supports: text, tapping list options, simulated photo upload, simulated Flow
   submission payloads (so the item picker logic is testable without WhatsApp).
 - Side panel shows live internals: current session state (status, collected
-  fields), and on completion the persisted case JSON.
+  fields), and on completion the persisted case JSON; with AI-assisted intake
+  (§17), the model's proposal and confidence.
+- AI controls (§17): force the AI to time out or fail, to show the menu fallback.
 - Reset button: clears the session for that phone.
 - This screen doubles as the merchant sales demo.
 
@@ -93,8 +104,9 @@ simulator gains whatever controls are needed to exercise them.
 - Taxonomy editor (full CRUD per §4).
 - Policy settings: return_window_days, refund_sla_days, locale/RTL, KVKK
   aydınlatma metni URL, retention period.
-- Integration connect: İkas private-app credentials (client_id/secret) v0.2;
-  Shopify/Woo next.
+- AI-assisted intake on/off (§17), off by default.
+- Integration connect (İkas private-app credentials; Shopify/Woo next) — not in
+  current scope (§14).
 - **Case views:** list of all cases (filter by status/category/date/order number),
   case detail (all fields raw+normalized, items, photos, timeline), including
   `abandoned` cases.
@@ -107,9 +119,9 @@ simulator gains whatever controls are needed to exercise them.
 - Case detail: the handoff package — category, subcategory, normalized fields,
   selected order items, photos, routing flags, conversation transcript (read-only).
 - Actions: change status (open → in_progress → resolved/closed), add internal
-  note, fire the item-picker Flow into an open conversation.
-- Explicit non-goals in v0.2: replying to customers from ChicChat, assignment
-  rules, notifications.
+  note. (Firing the item-picker Flow is not in current scope, §6.)
+- Explicit non-goals (v0.2 and v0.3): replying to customers from ChicChat,
+  assignment rules, notifications.
 
 ## 10. Non-functional requirements
 
@@ -167,8 +179,13 @@ console for their assigned merchants. Finer admin/agent roles remain future work
 | Flow endpoint failure | Error screen with retry; cache minimizes |
 | Unknown/unexpected exception | Catch at handler boundary; log with stack + correlation id; send generic "something went wrong, an agent will follow up"; mark session `errored`; surface in merchant console |
 | Abandoned conversation | TTL rules (§11) |
+| AI provider slow, failing or returning invalid output | Continue with the normal menus; one structured log line; no customer-visible error (§17) |
+| Customer rejects an AI suggestion | Normal menus or the full choice list; nothing from the rejected suggestion is kept |
 
 ## 14. Integrations
+
+*Not in current scope: integrations were dropped for now in November 2026 and
+Tier 0 is the only tier. The design below is kept for when they return.*
 
 Tier model: 0 none (always works) · 1 read (lookups + item picker) · 2 write
 (Phase 2). İkas first: Private App, client_credentials at
@@ -188,12 +205,36 @@ Structured JSON logs with merchant_id + correlation id for: webhook in, routing
 decision, validation failure, integration call/failure, case persisted,
 unexpected exception. Errored sessions visible in merchant console (§13).
 
-## 17. Future (explicitly deferred)
+## 17. AI-assisted intake (v0.3)
 
-- **v0.3 — LLM classify/extract:** on first free-text message, a lightweight LLM
-  proposes {category, subcategory, extracted fields} with confidence; high
-  confidence skips answered questions, low confidence falls back to menus.
-  Deterministic flow remains the always-available fallback. Testable entirely in
-  the simulator.
+A small, fast language model helps the customer skip questions they have already
+answered. It only ever **proposes**; the customer confirms. The deterministic
+menu flow remains the always-available fallback, and everything is testable in
+the simulator.
+
+- **Per-merchant switch**, off by default. Off means behaviour identical to v0.2.
+- **First message only:** the first free-text message of a new conversation is
+  classified into {category, subcategory, extracted fields} with a confidence.
+  Confident → one Yes/No confirmation summarising the understanding; Yes fills
+  the confirmed values and skips those questions; No or low confidence → the
+  normal category menu. Later messages are never re-classified.
+- **Free-text answers to choice fields:** when a typed answer matches no listed
+  value, the model proposes the closest listed value as a Yes/No confirmation;
+  No re-shows the list. A proposal is always one of the merchant's listed values.
+- **Masking:** phone numbers and order numbers are replaced with placeholders
+  before any text leaves the server. Order numbers are still extracted locally
+  by the existing normalizer (§5), so the model never sees them.
+- **Languages:** Turkish, English and mixed messages.
+- **Transparency:** case detail and console mark values the AI proposed and the
+  customer confirmed; analytics report the acceptance rate.
+- **Quality:** a versioned test set of example messages with expected answers,
+  and a scoring script; accuracy is measured, not judged by eye.
+- **Failure:** see §13 — the conversation always continues on the menus.
+- **KVKK:** sending customer text to an AI provider needs fuller legal treatment
+  (disclosure wording, cross-border transfer); masking and the merchant switch
+  are the v0.3 baseline, the rest is a later stage.
+
+## 18. Future (explicitly deferred)
+
 - **v0.4 — SLA engine:** user-defined SLAs with breach alerts on the dashboard.
 - Agent replies from ChicChat; Admin App store listing; Phase 2 write actions.

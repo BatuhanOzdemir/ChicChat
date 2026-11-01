@@ -388,6 +388,10 @@ deferred, it remains a free-text question. That is a known gap, not a defect.
 
 ## 8. Steps 9 and 10 — deferred, not dropped
 
+*Update, November 2026: at the start of v0.3 the user dropped both steps for
+now; integrations are out of current scope (see `CLAUDE.md`). The notes below
+remain the record of what resuming them would need.*
+
 **Step 9 — İkas connector.** Private-app credential entry in the merchant
 console; `client_credentials` token fetch with 4-hour refresh cached per
 merchant; `getOrder` over GraphQL against a free İkas dev store; tier flip from
