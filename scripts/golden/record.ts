@@ -85,7 +85,8 @@ export class Recorder {
     mkdirSync(dir, { recursive: true });
     writeFileSync(
       join(dir, `${this.module}.json`),
-      JSON.stringify(this.cases, null, 1) + "\n",
+      // One case per line: compact, and diffs show exactly which case changed.
+      "[\n" + this.cases.map((c) => JSON.stringify(c)).join(",\n") + "\n]\n",
     );
   }
 }

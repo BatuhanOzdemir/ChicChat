@@ -68,3 +68,50 @@ def assert_golden(
     )
     assert checked > 0, f"no golden cases for {module}"
     return checked
+
+
+_RENAMES = {
+    "from_status": "from",
+    "to_status": "to",
+    "from_date": "from",
+    "to_date": "to",
+}
+
+
+def _camel(name: str) -> str:
+    if name in _RENAMES:
+        return _RENAMES[name]
+    head, *rest = name.split("_")
+    return head + "".join(part.title() for part in rest)
+
+
+def ts_json(value: Any) -> Any:
+    """Convert a Python domain value into the JSON the TypeScript returned.
+
+    `Ok`/`Err` become `{ok, value}`/`{ok, error}`; dataclass fields become
+    camelCase keys; floats that are whole numbers become ints (JS numbers).
+    """
+    import dataclasses
+
+    from chicchat.domain.result import Err, Ok
+
+    if isinstance(value, Ok):
+        return {"ok": True, "value": ts_json(value.value)}
+    if isinstance(value, Err):
+        return {"ok": False, "error": value.error}
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return {
+            _camel(f.name): ts_json(getattr(value, f.name))
+            for f in dataclasses.fields(value)
+        }
+    if isinstance(value, dict):
+        return {key: ts_json(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [ts_json(item) for item in value]
+    if isinstance(value, float) and value.is_integer():
+        # JavaScript prints large whole numbers by their shortest decimal form
+        # (12345678901234567000), not the float's exact value.
+        from decimal import Decimal
+
+        return int(value) if abs(value) < 2**53 else int(Decimal(repr(value)))
+    return value
