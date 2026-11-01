@@ -19,20 +19,21 @@ port.
 
 ## 1. Decisions
 
-Decisions marked **(confirm)** are proposals that need the owner's sign-off in
-Port Step 0 before any code is written.
+Confirmed by the owner on 2026-11-01: D1 Python, D2 FastAPI (after comparing it
+with Django), and the D9 hosting direction. The owner authorized running Port
+Steps 0–6 without per-step sign-off; Port Step 7 needs sign-off.
 
 | # | Decision | Proposal | Why |
 |---|---|---|---|
-| D1 | Language | **Python 3.13** (confirm) | Owner reads it; strongest ecosystem for the v0.3 AI work. Java was considered: far more code for the same behaviour and slower iteration on a product still changing. |
-| D2 | Web framework | **FastAPI** (confirm) | Small, explicit, maps 1:1 onto today's routes. Django was considered: its ORM and migration system would fight our hand-written SQL and SQL migrations. |
-| D3 | Web pages | **Server-rendered Jinja2 templates + HTMX**, plus one small, commented JavaScript file for the simulator chat (confirm) | Owner can read the templates. The simulator's live chat and preset playback genuinely need a little browser code; everything else can be plain HTML forms. |
+| D1 | Language | **Python 3.13** ✓ confirmed | Owner reads it; strongest ecosystem for the v0.3 AI work. Java was considered: far more code for the same behaviour and slower iteration on a product still changing. |
+| D2 | Web framework | **FastAPI** ✓ confirmed | Small, explicit, maps 1:1 onto today's routes. Django was considered: its ORM and migration system would fight our hand-written SQL and SQL migrations. |
+| D3 | Web pages | **Server-rendered Jinja2 templates + HTMX**, plus one small, commented JavaScript file for the simulator chat | Owner can read the templates. The simulator's live chat and preset playback genuinely need a little browser code; everything else can be plain HTML forms. |
 | D4 | Styling | Keep the existing **Tailwind** classes; build CSS with the Tailwind **standalone CLI** (one binary, no Node.js) | Pages keep their current look without a Node toolchain. |
 | D5 | Database access | **psycopg 3** + **psycopg_pool**, **raw SQL copied verbatim** from the TypeScript files, synchronous code | Same queries, same behaviour; synchronous Python is easier to read than async. No ORM. |
 | D6 | Database schema | **Unchanged.** Same PostgreSQL, same 12 files in `supabase/migrations`, same Supabase CLI for local DB | The data is language-independent; hosted data needs no migration. |
 | D7 | Boundary validation | Port today's hand-written parsers as-is (functions returning ok/error results) rather than switching to Pydantic models | Exact parity of accepted input and error messages is far easier to prove. Pydantic can come later as a separate change. |
 | D8 | Tooling | **uv** (environments + lockfile), **pytest**, **ruff** (lint + format), **mypy --strict** (type check), **import-linter** (architecture rule) | Direct equivalents of today's npm / Vitest / ESLint + Prettier / `tsc --noEmit`. |
-| D9 | Hosting | Decide in Port Step 7 (confirm). Leading option: a **long-running container host in an EU region near the Supabase database** (e.g. Render, Railway, Fly.io). Re-check Vercel's current Python support at that step before ruling it out. | Today's webhook acknowledges Meta and *then* processes the message (`after()` on Vercel). That post-response work must reliably run, or customers wait for the 5-minute maintenance job. A long-running server makes this simple. |
+| D9 | Hosting | Direction ✓ confirmed; provider chosen in Port Step 7. Leading option: a **long-running container host in an EU region near the Supabase database** (e.g. Render, Railway, Fly.io). Re-check Vercel's current Python support at that step before ruling it out. | Today's webhook acknowledges Meta and *then* processes the message (`after()` on Vercel). That post-response work must reliably run, or customers wait for the 5-minute maintenance job. A long-running server makes this simple. |
 | D10 | Repository layout | Python lives beside TypeScript in the same repo (`python/`) until cutover; TypeScript is deleted only in the final step | Both can be run and compared at every step. |
 
 ---
@@ -462,3 +463,14 @@ Add items here as they are found; each becomes its own change after the port.
   detail page, and similar "v0.2" comments (noted in v0.3 Step 0).
 - Comment in `supabase/migrations/20260729120000_agent_console.sql` still points
   to the deleted `docs/RETROFIT.md` (migrations are not edited).
+
+---
+
+## 10. Progress log
+
+Updated at the end of every port step, so work can resume from here.
+
+| Step | Status | Notes |
+|---|---|---|
+| Baseline | ✓ | TypeScript: 195 unit tests, 153 DB tests pass on local PostgreSQL 16 (2026-11-01) |
+| Port Step 0 | ✓ | `python/` skeleton (uv, ruff, mypy strict, pytest, import-linter contracts for domain purity and layers), Python CI job, golden exporter (`scripts/golden/`) and comparison helper (`python/tests/golden.py`) |

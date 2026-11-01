@@ -32,3 +32,37 @@ jobs:
       - run: npm test
       - run: npm run test:db
       - run: npm run build
+
+  # The Python port (docs/PORT.md). Runs beside the TypeScript job until cutover.
+  python:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: local_ci_test
+          POSTGRES_DB: chicchat_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:local_ci_test@127.0.0.1:5432/chicchat_test
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.32"
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run lint-imports
+      - run: uv run pytest
+      - run: uv run python -m chicchat.scripts.prepare_test_db
+        if: hashFiles('python/chicchat/scripts/prepare_test_db.py') != ''
+      - run: uv run pytest -m db
+        if: hashFiles('python/chicchat/scripts/prepare_test_db.py') != ''

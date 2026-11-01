@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     // Generated / vendored:
     "coverage/**",
     "supabase/**",
+    // The Python port has its own linters (ruff, mypy).
+    "python/**",
   ]),
 ]);
 

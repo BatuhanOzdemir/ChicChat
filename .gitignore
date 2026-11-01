@@ -40,3 +40,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python port
+python/.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

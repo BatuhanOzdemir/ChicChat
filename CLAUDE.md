@@ -50,6 +50,10 @@ Awaiting sign-off for Step N+1.
 - **Python port first (November 2026):** before v0.3 Step 1, the codebase is
   ported from TypeScript to Python following `docs/PORT.md` (Port Steps 0–7,
   same working agreement). v0.3 Steps 1–5 are then built in Python.
+  The user confirmed Python + FastAPI and the hosting direction on 2026-11-01
+  and **authorized running Port Steps 0–6 without per-step sign-off**; Port
+  Step 7 (staging, cutover, removal of TypeScript) needs sign-off again.
+  Progress is tracked in `docs/PORT.md` §10.
 
 ---
 
