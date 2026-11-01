@@ -126,3 +126,66 @@ def test_the_session_cookie_is_http_only_lax_and_secure_in_production(
             and "max-age=43200" in header
         )
         assert response.headers["location"] == "/cases"
+
+
+def test_pages_never_show_another_merchants_case_or_photo(account: str) -> None:
+    """Signed in as a Demo Apparel member: a Butik Moda case and its photo are 404s."""
+    from chicchat.db.database import ConnectionDatabase
+    from chicchat.db.media import save_photo
+
+    with connect() as conn:
+        db = ConnectionDatabase(conn)
+        other_case = db.query(
+            """insert into cases (merchant_id, customer_wa_id, category_id, status)
+               select merchant_id, '905559990002', id, 'open' from categories
+                where merchant_id = $1 and key = 'kargo' returning id""",
+            [SECOND_MERCHANT_ID],
+        )[0]["id"]
+        save_photo(
+            db, SECOND_MERCHANT_ID, "905559990002", "secret-photo", b"png", "image/png"
+        )
+        db.query(
+            "update conversation_media set case_id=$1 where media_id='secret-photo'",
+            [other_case],
+        )
+    try:
+        with TestClient(create_app(), base_url="https://testserver") as client:
+            assert sign_in(client, account, PASSWORD) == 303
+            assert client.get(f"/cases/{other_case}").status_code == 404
+            assert client.get(f"/console/{other_case}").status_code == 404
+            assert (
+                client.get(f"/api/cases/{other_case}/media/secret-photo").status_code
+                == 404
+            )
+            # Choosing the other merchant in the switcher is refused too.
+            client.post(
+                "/merchant",
+                data={
+                    "merchant_id": SECOND_MERCHANT_ID,
+                    "back": "/cases",
+                    "csrf_token": client.cookies["chicchat_csrf"],
+                },
+                follow_redirects=False,
+            )
+            assert client.cookies.get("chicchat_merchant") != SECOND_MERCHANT_ID
+            assert client.get(f"/cases/{other_case}").status_code == 404
+    finally:
+        with connect() as conn:
+            conn.execute("delete from cases where id=%s", [other_case])
+            conn.execute("delete from conversation_media where media_id='secret-photo'")
+
+
+def test_every_operator_page_renders_for_a_member(account: str) -> None:
+    with TestClient(create_app(), base_url="https://testserver") as client:
+        assert sign_in(client, account, PASSWORD) == 303
+        for path in (
+            "/",
+            "/cases",
+            "/console",
+            "/config",
+            "/simulator",
+            "/cases?status=bogus",
+        ):
+            response = client.get(path)
+            assert response.status_code == 200, path
+            assert "<html" in response.text

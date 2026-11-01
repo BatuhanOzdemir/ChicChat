@@ -485,6 +485,10 @@ Add items here as they are found; each becomes its own change after the port.
   live in `domain/simulator/presets.py`; the browser asks the server for each
   next step and only handles looping and Stop. The three `available-options`
   unit tests (which bubbles stay tappable) become browser checks in Step 5.
+- **No HTMX:** plain forms plus two small commented scripts (`config.js`,
+  `simulator.js`) covered everything HTMX was planned for (D3).
+- **New endpoint:** `POST /api/simulator/preset-step` returns a preset's next
+  scripted answer, so the playback rule stays in Python.
 - **Classifier hand-off:** a `null` value in `pendingInitial` is skipped instead
   of crashing (nothing writes one yet; v0.3 will).
 
@@ -501,3 +505,4 @@ Updated at the end of every port step, so work can resume from here.
 | Port Step 1 | ✓ | `chicchat/domain` complete: normalize, rules, intake, cases, config, whatsapp, simulator, logging, auth, nav. 175/175 TypeScript domain tests ported (by name, checked by script) plus 19 extra; golden comparisons over ~25,000 recorded TypeScript calls match exactly. `jscompat.py`/`dates.py` hold the JavaScript semantics. |
 | Port Steps 2–3 | ✓ | `chicchat/db` (SQL verbatim), `chicchat/server` (handler, inbox, outbox, maintenance, simulator, logger, env), scripts (seed, console_user, prepare_test_db). All 12 DB test files ported: **153/153 DB tests**, matching the TypeScript count, passing on local PostgreSQL 16, including the threaded concurrency gates. Python seed output identical to the TypeScript seed. Simulator preset rule moved to `domain/simulator/presets.py` (browser only loops). |
 | Port Step 4 | ✓ | FastAPI app (`chicchat/web`): 5 API routes + simulator preset-step, login gate middleware, sign-in/out, boot check, background inbox processing, CSRF (double-submit token + Origin check, enforced on every state-changing route by a test). 35 HTTP tests (every row of §2, P1 production default, P2 raw-byte signatures, P4) + 2 DB-backed sign-in tests. |
+| Port Step 5 | ✓ | All operator pages as Jinja2 templates (same Tailwind classes; CSS built with Tailwind 4.3.1 into `static/app.css`): login, home, cases + detail, console + detail with status/note actions, configuration editor, simulator. Two commented scripts: `config.js` (in-place saves that keep other sections' unsaved drafts) and `simulator.js` (chat UI; presets ask the server for each step). Browser walkthrough `tests/browser/` (`pytest -m browser`): 6/6, stable across reruns — presets in three categories, private photo evidence, delivery failure + retry, nudge/abandon with choices staying tappable, custom choice field end to end with drafts preserved, filters and console status change. DB-backed page tests prove another merchant's case and photo are 404s. |

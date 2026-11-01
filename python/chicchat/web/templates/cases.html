@@ -1,0 +1,139 @@
+{% extends "app_base.html" %}
+{% from "ui.html" import status_badge, priority_badge, queue_name, panel, stat, error_box, merchant_switcher with context %}
+{% block title %}Cases · ChicChat{% endblock %}
+{% block content %}
+{% set field = "rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900" %}
+{% if error %}
+<main class="mx-auto max-w-5xl p-6">
+  <h1 class="text-2xl font-semibold">Cases</h1>
+  <div class="mt-4">{{ error_box(error) }}</div>
+  <a class="mt-4 inline-block text-sm underline" href="/cases">Clear filters</a>
+</main>
+{% else %}
+<main class="mx-auto max-w-6xl p-6 text-zinc-900 dark:text-zinc-100">
+  <header class="mb-4">
+    {% if pending %}
+    <aside class="mb-4 rounded border border-amber-400 p-3" role="status">
+      <strong>{{ pending | length }} replies awaiting delivery</strong>
+      <p class="text-sm">Automatic retries are scheduled. Check WhatsApp credentials if failures persist.</p>
+      <ul>
+        {% for item in pending %}
+        <li class="text-xs">Customer ending {{ item.customer_wa_id[-4:] }} · {{ item.attempts }} attempts · {{ item.last_error or "" }}</li>
+        {% endfor %}
+      </ul>
+    </aside>
+    {% endif %}
+    <div class="flex flex-wrap items-baseline justify-between gap-2">
+      <h1 class="text-2xl font-semibold">Cases</h1>
+      {{ merchant_switcher(merchant, "/cases") }}
+    </div>
+    <p class="text-sm text-zinc-500">
+      {{ page.total }} case(s) matching · last 30 days of counters ·
+      <a class="underline" href="/console">agent console</a> ·
+      <a class="underline" href="/config">configuration</a> ·
+      <a class="underline" href="/simulator">simulator</a>
+    </p>
+  </header>
+  <p class="mb-4 text-sm text-zinc-500">Browse all cases and intake statistics. Open a case to work on it in the Agent console. Dates use DD/MM/YYYY, Istanbul time.</p>
+  <div class="space-y-4">
+    {% call panel("Last 30 days") %}
+    <div class="flex flex-wrap gap-3">
+      {{ stat("Cases", counters.completed + counters.abandoned) }}
+      {{ stat("Median intake", counters.median_intake_seconds | duration) }}
+      {{ stat("Abandonment", abandonment | percent) }}
+      {% for s in counters.by_status %}{{ stat(s.status, s.n) }}{% endfor %}
+    </div>
+    {% if counters.by_category %}
+    <ul class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+      {% for c in counters.by_category %}<li>{{ c.category_label }}: <strong>{{ c.n }}</strong></li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if counters.by_day %}
+    <ul class="mt-2 flex flex-wrap gap-x-3 text-xs text-zinc-500">
+      {% for d in counters.by_day[:10] %}<li>{{ d.day }}: <strong>{{ d.n }}</strong></li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% endcall %}
+
+    {% call panel("Filters") %}
+    <form class="flex flex-wrap items-end gap-3" method="get">
+      <label class="flex flex-col gap-1 text-xs text-zinc-500">Status
+        <select class="{{ field }}" name="status">
+          <option value="">any</option>
+          {% for s in statuses %}<option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="flex flex-col gap-1 text-xs text-zinc-500">Category
+        <select class="{{ field }}" name="category">
+          <option value="">any</option>
+          {% for c in category_options %}<option value="{{ c.key }}" {% if filters.category_key == c.key %}selected{% endif %}>{{ c.label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="flex flex-col gap-1 text-xs text-zinc-500">From
+        <input class="{{ field }}" type="date" name="from" value="{{ filters.from_date or '' }}">
+      </label>
+      <label class="flex flex-col gap-1 text-xs text-zinc-500">To
+        <input class="{{ field }}" type="date" name="to" value="{{ filters.to_date or '' }}">
+      </label>
+      <label class="flex flex-col gap-1 text-xs text-zinc-500">Queue
+        <input class="{{ field }}" name="queue" value="{{ filters.queue or '' }}" placeholder="returns_queue">
+      </label>
+      <label class="flex flex-col gap-1 text-xs text-zinc-500">Order number
+        <input class="{{ field }}" name="order_number" value="{{ filters.order_number or '' }}" placeholder="Your store’s order number">
+      </label>
+      <button type="submit" class="rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900">Apply</button>
+      <a class="pb-1.5 text-xs underline" href="/cases">Clear</a>
+    </form>
+    {% endcall %}
+
+    {% if errored %}
+    {% call panel("Errored sessions", "needs attention (SPEC §13)") %}
+    <ul class="space-y-1 text-sm">
+      {% for session in errored %}
+      <li class="flex gap-3">
+        <span class="font-mono text-xs">{{ session.customer_wa_id | masked }}</span>
+        <span class="text-zinc-500">{{ session.category_key or "no category yet" }}</span>
+        <span class="truncate text-xs text-red-700 dark:text-red-300">{{ session.last_error or "unknown error" }}</span>
+        <span class="ms-auto text-xs text-zinc-500">{{ session.updated_at | datetime }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endcall %}
+    {% endif %}
+
+    {% call panel("Case list") %}
+    {% if not page.rows %}
+    <p class="text-sm text-zinc-500">No cases match. Generate some in the <a class="underline" href="/simulator">simulator</a>.</p>
+    {% else %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs uppercase text-zinc-500">
+            <th class="py-1 pe-3">When</th><th class="py-1 pe-3">Status</th><th class="py-1 pe-3">Queue</th>
+            <th class="py-1 pe-3">Category</th><th class="py-1 pe-3">Order</th><th class="py-1 pe-3">Customer</th>
+            <th class="py-1 pe-3">Fields</th><th class="py-1"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in page.rows %}
+          <tr class="border-t border-zinc-100 dark:border-zinc-800">
+            <td class="py-1.5 pe-3 whitespace-nowrap text-xs">{{ row.created_at | datetime }}</td>
+            <td class="py-1.5 pe-3">{{ status_badge(row.status) }}</td>
+            <td class="py-1.5 pe-3 whitespace-nowrap"><span class="font-mono text-xs">{{ queue_name(row.queue) }}</span> {{ priority_badge(row.priority) }}</td>
+            <td class="py-1.5 pe-3">{{ row.category_label }}{% if row.subcategory_key %}<span class="text-xs text-zinc-500"> / {{ row.subcategory_key }}</span>{% endif %}</td>
+            <td class="py-1.5 pe-3 font-mono text-xs"><a class="underline" href="/console/{{ row.id }}">{{ row.order_number or "No order number" }}</a></td>
+            <td class="py-1.5 pe-3 font-mono text-xs">{{ row.customer_wa_id | masked }}</td>
+            <td class="py-1.5 pe-3 text-xs">{{ row.field_count }}</td>
+            <td class="py-1.5"><a class="text-xs underline" href="/console/{{ row.id }}">Work on case</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% if pages > 1 %}<p class="mt-3 text-xs text-zinc-500">Page {{ page.page }} of {{ pages }}</p>{% endif %}
+    {% endcall %}
+  </div>
+</main>
+{% endif %}
+{% endblock %}

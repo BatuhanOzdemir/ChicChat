@@ -20,6 +20,7 @@ dev = [
     "ruff>=0.8,<0.9",
     "mypy>=1.13,<1.14",
     "import-linter>=2.1,<3",
+    "playwright>=1.48,<2",
 ]
 
 [build-system]
@@ -53,8 +54,11 @@ packages = ["chicchat", "tests"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # DB tests need a live PostgreSQL; run them with `pytest -m db`.
-markers = ["db: needs a local *_test PostgreSQL database (DATABASE_URL)"]
-addopts = "-m 'not db' -q"
+markers = [
+    "db: needs a local *_test PostgreSQL database (DATABASE_URL)",
+    "browser: drives the app in Chromium (needs the _test database and Playwright)",
+]
+addopts = "-m 'not db and not browser' -q"
 filterwarnings = [
     # Starlette's TestClient uses an anyio alias anyio deprecated; not our code.
     "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",

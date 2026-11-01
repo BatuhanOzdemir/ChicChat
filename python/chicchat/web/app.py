@@ -31,7 +31,7 @@ from chicchat.server.env import (
 )
 from chicchat.server.logger import logger
 from chicchat.web import deps
-from chicchat.web.routes import api, auth
+from chicchat.web.routes import api, auth, pages
 from chicchat.web.security import CSRF_COOKIE, csrf_token
 
 STATIC = Path(__file__).parent / "static"
@@ -115,6 +115,7 @@ def create_app() -> FastAPI:
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     app.include_router(api.router)
     app.include_router(auth.router)
+    app.include_router(pages.router)
 
     @app.exception_handler(deps.LoginRequiredError)
     async def _login_required(

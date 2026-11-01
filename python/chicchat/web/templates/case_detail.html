@@ -1,0 +1,67 @@
+{% extends "app_base.html" %}
+{% from "ui.html" import status_badge, priority_badge, queue_name, panel, evidence_photos with context %}
+{% block title %}{{ detail.category_label }} · ChicChat{% endblock %}
+{% block content %}
+<main class="mx-auto max-w-4xl p-6 text-zinc-900 dark:text-zinc-100">
+  <header class="mb-4">
+    <a class="text-xs underline" href="/cases">← all cases</a>
+    <h1 class="mt-1 flex flex-wrap items-center gap-2 text-2xl font-semibold">
+      {{ detail.category_label }} {{ status_badge(detail.status) }} {{ priority_badge(detail.priority) }}
+      <span class="font-mono text-xs font-normal text-zinc-500">{{ queue_name(detail.queue) }}</span>
+    </h1>
+    <p class="text-sm text-zinc-500">
+      <code>{{ detail.category_key }}</code>{% if detail.subcategory_key %} / <code>{{ detail.subcategory_key }}</code>{% endif %}
+      · customer {{ detail.customer_wa_id | masked }} · tier {{ detail.integration_tier }} · {{ detail.created_at | datetime }}
+      · intake took {{ intake_seconds | duration }} ·
+      <a class="underline" href="/console/{{ detail.id }}">work on it in the agent console</a>
+    </p>
+  </header>
+  <div class="space-y-4">
+    {% call panel("Captured fields") %}
+    {% if not detail.fields %}
+    <p class="text-sm text-zinc-500">Nothing captured.</p>
+    {% else %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-xs uppercase text-zinc-500">
+          <th class="py-1 pe-3">Field</th><th class="py-1 pe-3">Normalized</th><th class="py-1 pe-3">Raw (as sent)</th><th class="py-1">Type</th>
+        </tr></thead>
+        <tbody>
+          {% for f in detail.fields %}
+          <tr class="border-t border-zinc-100 dark:border-zinc-800">
+            <td class="py-1.5 pe-3 font-mono text-xs">{{ f.field_key }}</td>
+            <td class="py-1.5 pe-3">{{ f.normalized_value if f.normalized_value is not none else "—" }}</td>
+            <td class="py-1.5 pe-3 text-zinc-500">{{ f.raw_value if f.raw_value is not none else "—" }}</td>
+            <td class="py-1.5 text-xs text-zinc-500">{{ f.type or "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% endcall %}
+
+    {% call panel("Selected items (" ~ (detail["items"] | length) ~ ")") %}
+    {% if not detail["items"] %}
+    <p class="text-sm text-zinc-500">None — Tier 0 captures the item as text (SPEC §6.4).</p>
+    {% else %}
+    <ul class="space-y-1 text-sm">
+      {% for item in detail["items"] %}
+      <li><span class="font-mono text-xs">{{ item.line_item_id }}</span> {{ item.title or "" }}{% if item.variant %}<span class="text-zinc-500"> · {{ item.variant }}</span>{% endif %} <span class="text-xs text-zinc-500">×{{ item.qty }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% endcall %}
+
+    {% call panel("Photos (" ~ (photos | length) ~ ")") %}{{ evidence_photos(detail.id, photos) }}{% endcall %}
+
+    {% call panel("Timeline") %}
+    <ol class="space-y-1 text-sm">
+      {% for entry in timeline %}
+      <li class="flex gap-3"><span class="w-40 shrink-0 text-xs text-zinc-500">{{ entry.at | datetime }}</span><span>{{ entry.what }}</span></li>
+      {% endfor %}
+    </ol>
+    {% endcall %}
+  </div>
+</main>
+{% endblock %}

@@ -1,0 +1,86 @@
+{# Shared presentation for the operator pages — port of cases/ui.tsx. #}
+{% set STATUS_TONE = {
+  "open": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200",
+  "in_progress": "bg-indigo-100 text-indigo-900 dark:bg-indigo-900/60 dark:text-indigo-100",
+  "needs_info": "bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-100",
+  "handed_off": "bg-sky-100 text-sky-900 dark:bg-sky-900/60 dark:text-sky-100",
+  "escalated": "bg-orange-100 text-orange-900 dark:bg-orange-900/60 dark:text-orange-100",
+  "resolved": "bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200",
+  "abandoned": "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
+} %}
+{% set PRIORITY_TONE = {
+  "high": "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
+  "normal": "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  "low": "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
+} %}
+
+{% macro status_badge(status) -%}
+<span class="rounded px-1.5 py-0.5 text-xs font-medium {{ STATUS_TONE.get(status, STATUS_TONE['resolved']) }}">{{ status }}</span>
+{%- endmacro %}
+
+{% macro priority_badge(priority) -%}
+<span class="rounded px-1.5 py-0.5 text-xs font-medium {{ PRIORITY_TONE.get(priority, PRIORITY_TONE['normal']) }}">{{ priority }}</span>
+{%- endmacro %}
+
+{# A case with no matching routing rule belongs to no queue (SPEC §3). #}
+{% macro queue_name(queue) -%}{{ queue if queue is not none else "unrouted" }}{%- endmacro %}
+
+{% macro panel(title, aside="") -%}
+<section class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+  <div class="mb-3 flex items-baseline justify-between gap-2">
+    <h2 class="font-medium">{{ title }}</h2>
+    {% if aside %}<span class="text-xs text-zinc-500">{{ aside }}</span>{% endif %}
+  </div>
+  {{ caller() }}
+</section>
+{%- endmacro %}
+
+{% macro stat(label, value) -%}
+<div class="min-w-28 rounded border border-zinc-200 p-3 dark:border-zinc-800">
+  <div class="text-xs text-zinc-500">{{ label }}</div>
+  <div class="text-lg font-semibold">{{ value }}</div>
+</div>
+{%- endmacro %}
+
+{% macro error_box(message) -%}
+<p class="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">{{ message }}</p>
+{%- endmacro %}
+
+{% macro csrf() -%}
+<input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+{%- endmacro %}
+
+{# Which tenant am I looking at, and switch to another (Step 6). #}
+{% macro merchant_switcher(context, back) -%}
+{% if context.options | length == 1 %}
+<span class="text-xs text-zinc-500">merchant <strong>{{ context.current.name }}</strong></span>
+{% else %}
+<form method="post" action="/merchant" class="flex items-center gap-2 text-xs text-zinc-500">
+  {{ csrf() }}
+  <input type="hidden" name="back" value="{{ back }}">
+  <label class="flex items-center gap-1">
+    merchant
+    <select class="rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900" name="merchant_id">
+      {% for m in context.options %}
+      <option value="{{ m.id }}" {% if m.id == context.current.id %}selected{% endif %}>{{ m.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit" class="rounded border border-zinc-300 px-2 py-1 font-medium hover:border-zinc-500 dark:border-zinc-700">Switch</button>
+</form>
+{% endif %}
+{%- endmacro %}
+
+{% macro evidence_photos(case_id, photos) -%}
+<div class="flex flex-wrap gap-3">
+  {% for media_id in photos %}
+  {% set src = "/api/cases/" ~ (case_id | urlencode) ~ "/media/" ~ (media_id | urlencode) %}
+  <figure class="rounded border p-2">
+    <a href="{{ src }}" target="_blank" rel="noreferrer">
+      <img src="{{ src }}" alt="Customer evidence" width="240" height="180" class="max-h-48 object-contain">
+    </a>
+    <figcaption class="text-xs text-zinc-500">Open photo · older unavailable media may need resending</figcaption>
+  </figure>
+  {% endfor %}
+</div>
+{%- endmacro %}

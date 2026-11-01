@@ -1,0 +1,96 @@
+{% extends "app_base.html" %}
+{% block title %}Chat simulator · ChicChat{% endblock %}
+{#
+  The permanent test bench (SPEC §7). The page is rendered here; the chat is
+  driven by /static/simulator.js, which posts to /api/simulator — the same
+  parser and handler the real webhook uses.
+#}
+{% set field = "w-full rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-800" %}
+{% set button = "rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800" %}
+{% block content %}
+<main class="mx-auto max-w-6xl p-6 text-zinc-900 dark:text-zinc-100">
+  <header class="mb-4">
+    <h1 class="text-2xl font-semibold">Chat simulator</h1>
+    <p class="text-sm text-zinc-500">Synthetic messages are injected into the same parser and handler the real webhook uses — only the signature check is bypassed, and no Meta credentials are involved.</p>
+  </header>
+  {% if not merchants %}
+  <p class="rounded border border-red-300 p-4 text-sm text-red-700">No merchants found. Run <code>uv run python -m chicchat.scripts.seed</code> first.</p>
+  {% else %}
+  <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]" id="simulator"
+       data-merchants="{{ merchants | tojson_js }}" data-selected="{{ selected_merchant_id }}">
+    <section id="chat" class="flex min-h-[32rem] flex-1 flex-col rounded-xl border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900">
+      <header class="flex items-center gap-2 rounded-t-xl bg-emerald-700 px-4 py-2 text-sm font-medium text-white">
+        <span class="grid size-7 place-items-center rounded-full bg-emerald-600">💬</span>
+        ChicChat (simulated WhatsApp)
+      </header>
+      <div id="transcript" class="flex-1 space-y-2 overflow-y-auto p-4">
+        <p class="py-8 text-center text-sm text-zinc-500">Send a message to start an intake.</p>
+      </div>
+      <div id="options" class="flex flex-wrap gap-2 border-t border-zinc-200 p-3 dark:border-zinc-800" hidden></div>
+      <form id="composer" class="flex items-center gap-2 border-t border-zinc-200 p-3 dark:border-zinc-800">
+        <input id="draft" placeholder="Type a message…" aria-label="Message" autocomplete="off"
+               class="flex-1 rounded-full border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800">
+        <button type="submit" data-busy class="rounded-full bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50">Send</button>
+      </form>
+    </section>
+
+    <div class="space-y-4">
+      <section class="space-y-4 rounded-xl border border-zinc-200 p-4 text-sm dark:border-zinc-800">
+        <div class="space-y-2">
+          <h2 class="font-medium">Who</h2>
+          <label class="block text-xs text-zinc-500">Merchant
+            <select id="merchant" data-busy class="{{ field }}">
+              {% for m in merchants %}
+              <option value="{{ m.id }}" {% if m.id == selected_merchant_id %}selected{% endif %}>{{ m.name }} ({{ m.locale }}{% if m.rtl %}, RTL{% endif %})</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="block text-xs text-zinc-500">Customer phone (fake)
+            <input id="phone" data-busy value="905550000001" class="{{ field }}">
+          </label>
+        </div>
+        <div class="space-y-2">
+          <h2 class="font-medium">Send</h2>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" id="send-photo" data-busy class="{{ button }}">🖼️ Fake photo</button>
+            <button type="button" id="send-flow" data-busy class="{{ button }}" title='{"item_ref":"Slim Fit Shirt — Blue / M"}'>🧾 Fake Flow payload</button>
+          </div>
+        </div>
+        <div class="space-y-2">
+          <h2 class="font-medium">Presets</h2>
+          <p class="text-xs text-zinc-500">Demo scenarios use sample order numbers. If a choice is rejected, the preset pauses so you can answer manually.</p>
+          <button type="button" id="stop-preset" class="{{ button }}" disabled>Stop preset</button>
+          <ul class="space-y-1">
+            {% for preset in presets %}
+            <li><button type="button" data-busy data-preset="{{ preset.id }}" data-replay="{{ 'true' if preset.replay_greeting else 'false' }}" data-greeting="{{ preset.greeting }}" class="{{ button }} w-full text-left" title="{{ preset.description }}">▶ {{ preset.label }}</button></li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="space-y-2">
+          <h2 class="font-medium">Injection &amp; time</h2>
+          <button type="button" id="retry-delivery" data-busy class="{{ button }}">Retry pending delivery</button>
+          <label class="block text-xs text-zinc-500">Error injection (applies to the next message)
+            <select id="inject" class="{{ field }}">
+              <option value="">none</option>
+              <option value="handler_exception">handler_exception</option>
+              <option value="delivery_failure">delivery_failure</option>
+              <option value="integration_down">integration_down</option>
+            </select>
+          </label>
+          <div class="flex flex-wrap gap-2">
+            {% for minutes in [5, 60, 1440] %}
+            <button type="button" data-busy data-age="{{ minutes }}" class="{{ button }}">⏩ age {{ (minutes ~ "m") if minutes < 60 else ((minutes // 60) ~ "h") }} &amp; check</button>
+            {% endfor %}
+          </div>
+          <button type="button" id="maintenance" data-busy class="{{ button }} w-full" title="Runs the inactivity job: nudge after nudge_after_minutes, abandon after abandon_after_hours">🧹 Run maintenance now</button>
+        </div>
+        <button type="button" id="refresh" data-busy class="{{ button }}">Refresh session</button>
+        <button type="button" id="reset" data-busy class="w-full rounded bg-zinc-900 px-3 py-2 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">End conversation &amp; reset</button>
+      </section>
+      <section id="inspector" class="space-y-4 rounded-xl border border-zinc-200 p-4 text-sm dark:border-zinc-800"></section>
+    </div>
+  </div>
+  <script src="/static/simulator.js" defer></script>
+  {% endif %}
+</main>
+{% endblock %}

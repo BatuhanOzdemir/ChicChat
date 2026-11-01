@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block body %}
+{% set button = "rounded-full px-5 py-2 text-sm font-medium text-white hover:opacity-90" %}
+<div class="flex flex-1 flex-col items-center justify-center bg-zinc-50 p-8 dark:bg-black">
+  <main class="flex w-full max-w-xl flex-col gap-3 text-center">
+    <h1 class="text-3xl font-semibold tracking-tight">ChicChat</h1>
+    <p class="text-zinc-600 dark:text-zinc-400">WhatsApp-native structured intake &amp; triage for fashion retailers.</p>
+    <p class="text-sm text-zinc-500">See <code>CLAUDE.md</code> for the build plan.</p>
+    <div class="mx-auto mt-2 flex flex-wrap justify-center gap-2">
+      <a href="/console" class="{{ button }} bg-violet-700">Agent console →</a>
+      <a href="/cases" class="{{ button }} bg-sky-700">Cases →</a>
+      <a href="/simulator" class="{{ button }} bg-emerald-700">Chat simulator →</a>
+      <a href="/config" class="{{ button }} bg-zinc-900 dark:bg-zinc-700">Merchant configuration →</a>
+    </div>
+  </main>
+</div>
+{% endblock %}
