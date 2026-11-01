@@ -67,7 +67,12 @@ def run(
     conn: psycopg.Connection[Any], sql: str, params: Sequence[object] = ()
 ) -> list[Row]:
     with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(to_psycopg(sql), _params(params) if params else None)
+        # Without parameters psycopg performs no `%` substitution at all, so the
+        # SQL goes through untouched (doubling `%` would corrupt LIKE patterns).
+        if params:
+            cur.execute(to_psycopg(sql), _params(params))
+        else:
+            cur.execute(sql)
         return list(cur.fetchall()) if cur.description else []
 
 
