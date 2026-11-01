@@ -47,6 +47,7 @@ Awaiting sign-off for Step N+1.
   old CLAUDE.md with this file; delete superseded addition files. Add
   `npm run typecheck` (`tsc --noEmit`). Audit existing code against the
   Handbook; produce `docs/RETROFIT.md` listing every violation (no fixes yet).
+  *(Since folded into `docs/DEVELOPMENT-LOG.md` §18.)*
 - **Gate:** three docs in place; typecheck script runs; RETROFIT.md lists
   findings with file references.
 

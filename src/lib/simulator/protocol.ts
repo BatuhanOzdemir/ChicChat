@@ -25,7 +25,7 @@ export interface SimulatorMessageInput {
 /**
  * Error injection (SPEC §7). `handler_exception` forces a real exception inside
  * message processing. `integration_down` is accepted and echoed but has nothing
- * to degrade until the first connector exists (Step 9) — see docs/RETROFIT.md.
+ * to degrade until the first connector exists (Step 9) — see docs/DEVELOPMENT-LOG.md §18.
  */
 export type SimulatorErrorInjection =
   | "handler_exception"

@@ -1,5 +1,6 @@
 /**
- * Test-only isolation support (docs/RETROFIT.md R6b, third occurrence).
+ * Test-only isolation support (retrofit finding R6b, third occurrence;
+ * docs/DEVELOPMENT-LOG.md §18).
  *
  * The integration tests wrap each case in `begin`/`rollback`, which makes them
  * independent of **each other** — but not of whatever is already committed in

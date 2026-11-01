@@ -66,7 +66,8 @@ async function sim(
 /**
  * Messages this run would have sent to one phone. The job sweeps every session
  * the merchant has, so assertions scope to their own conversation rather than
- * assuming the database holds nothing else (see docs/RETROFIT.md R6b).
+ * assuming the database holds nothing else (see retrofit finding R6b,
+ * docs/DEVELOPMENT-LOG.md §18).
  */
 function sentTo(
   response: Awaited<ReturnType<typeof runSimulatorAction>>,
