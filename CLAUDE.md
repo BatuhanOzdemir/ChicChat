@@ -47,6 +47,9 @@ Awaiting sign-off for Step N+1.
   work (Flows, templates, new message types) unless we agree it first. All v0.3
   behaviour is built and demonstrated in the simulator.
 - The old rule that v0.3 waits for a real-merchant demo is **dropped**.
+- **Python port first (November 2026):** before v0.3 Step 1, the codebase is
+  ported from TypeScript to Python following `docs/PORT.md` (Port Steps 0–7,
+  same working agreement). v0.3 Steps 1–5 are then built in Python.
 
 ---
 
