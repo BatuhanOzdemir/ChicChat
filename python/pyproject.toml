@@ -55,6 +55,10 @@ testpaths = ["tests"]
 # DB tests need a live PostgreSQL; run them with `pytest -m db`.
 markers = ["db: needs a local *_test PostgreSQL database (DATABASE_URL)"]
 addopts = "-m 'not db' -q"
+filterwarnings = [
+    # Starlette's TestClient uses an anyio alias anyio deprecated; not our code.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
 
 [tool.importlinter]
 root_package = "chicchat"
