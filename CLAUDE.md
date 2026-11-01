@@ -1,7 +1,7 @@
 # CLAUDE.md — Working Agreement & v0.2 Build Plan
 
-September 2026 continuation: see `docs/REPAIR-PLAN.md` and
-`docs/REPAIR-REPORT.md` for the user-authorized repair batch after the review.
+September 2026 continuation: see `docs/DEVELOPMENT-LOG.md` §§15–16 for the
+user-authorized repair batch after the review and its follow-up fixes.
 The user authorized executing that complete batch without per-step pauses.
 The v0.2 milestones below remain the historical plan; Steps 9–10 remain deferred.
 

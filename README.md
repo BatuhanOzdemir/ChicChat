@@ -34,7 +34,6 @@ must never run against customer data. CI provisions its own PostgreSQL 17 servic
 ## Project documents
 
 - [Specification](docs/SPEC.md)
-- [Development history](docs/DEVELOPMENT-LOG.md)
-- [Repair plan](docs/REPAIR-PLAN.md) and [implementation report](docs/REPAIR-REPORT.md)
+- [Development history, including the September 2026 repairs](docs/DEVELOPMENT-LOG.md)
 - [Deployment and account provisioning](docs/DEPLOYMENT.md)
 - [Development conventions and roadmap](CLAUDE.md)

@@ -1,9 +1,10 @@
-# DEVELOPMENT LOG — ChicChat, from first commit to the close of v0.2
+# DEVELOPMENT LOG — ChicChat, from first commit through the September 2026 repairs
 
-Historical record through August 2026. For subsequent reliability, privacy,
-authentication and simulator repairs, see `REPAIR-REPORT.md`. Statements below
-about shared passcodes, missing retention and pointer-only media describe the
-August implementation, not the repaired code.
+Sections 1–14 are the historical record through August 2026. The September
+reliability, privacy, authentication and simulator repairs are in §15, and the
+follow-up user-findings fixes in §16. Statements in §§1–14 about shared
+passcodes, missing retention and pointer-only media describe the August
+implementation, not the repaired code.
 
 Written 2026-08-28, at the close of v0.2. This is the narrative record of how
 the product was built: what shipped in each step, what each verification gate
@@ -19,7 +20,7 @@ It complements rather than repeats the other documents:
 | `CLAUDE.md` | The working agreement + the v0.2 build plan |
 | `docs/RETROFIT.md` | The v0.1-vs-Handbook audit, and which step closed each finding |
 | `docs/DEPLOYMENT.md` | The runbook for deploying and operating it |
-| **this file** | What actually happened, in order, and why |
+| **this file** | What actually happened, in order, and why — including the September repairs |
 
 ---
 
@@ -578,7 +579,171 @@ and 0099) remain in the production console and can be removed at any time.
 
 ---
 
-## 15. Appendix — commands
+## 15. September 2026 repair batch
+
+After the v0.2 review, the repairs below were run as one user-authorized
+batch rather than as signed-off single steps.
+
+### Plan
+
+The user authorized implementation of this repair sequence on 2026-09-09.
+This authorization supersedes the old per-step sign-off pauses for this batch.
+No hosted migrations, real customer erasure, or deployment is part of local verification.
+
+| Phase | Work | Verification gate |
+|---|---|---|
+| 1 | Redact diagnostics; validate condition trees at form and evaluation boundaries | Synthetic phone/secret regression tests; malformed and excessive-depth rules rejected |
+| 2 | Snapshot case taxonomy and field metadata; preserve deleted-category history | Delete taxonomy after intake; list, detail, queue, filters and evidence still work |
+| 3 | Transaction-level conversation locks; one nudge; atomic abandonment | Independent PostgreSQL connections race safely; resumed sessions never re-nudge |
+| 4 | Durable inbox before acknowledgement; transactional outbox; retry worker | Fail delivery then retry without advancing intake twice; workers serialize |
+| 5 | Customer erasure and retention; scoped console sessions | Erasure removes transcripts and queued payloads; another merchant remains untouched; forged access refused |
+| 6 | Simulator recovery controls, regression suite and documentation | Unit/integration tests, lint, typecheck, production build; record external limitations |
+
+The deferred Ikas connector and Meta Flow are separate milestones. Product-pilot
+measurements require real merchants. Media persistence and customer-language UX
+will be addressed within the repaired intake path where feasible and explicitly
+reported if any external setup remains.
+
+Delivery semantics: PostgreSQL can guarantee one state transition per inbound
+message. External WhatsApp sends cannot be made exactly-once across a network
+failure after Meta accepts a request; retries are at-least-once. Preserve this
+distinction in tests and operating documentation.
+
+### Report
+
+Implemented locally on 2026-09-09 against the sequence in the plan above.
+No hosted database migrations, real WhatsApp sends, customer erasure, or deployment
+were performed during verification.
+
+#### Results
+
+| Review issue | Implemented correction |
+|---|---|
+| Phones and secrets leaked through correlation IDs and exception text | Recursive diagnostic redaction; sanitized transport failures; opaque session correlation IDs |
+| Concurrent answers could overwrite session progress | Transaction-scoped PostgreSQL advisory locks per merchant and customer, including first contact |
+| Acknowledged webhooks could disappear before processing | Commit an inbox record before HTTP 200; return 503 on failed durable acceptance; scheduled recovery |
+| Failed replies were lost or replaced by contradictory generic errors | Queue replies in the intake transaction; deliver after commit; ordered retries with backoff and console visibility |
+| Deleted taxonomy hid historical cases | Immutable category and field snapshots; case lists, details, queues and filters use snapshots |
+| Invalid rule JSON could crash intake | Bounded recursive validation at configuration and evaluation boundaries; simple field/operator/value input alongside advanced JSON |
+| Resumed sessions could receive another nudge | Persist one nudge marker for the lifetime of the session; queue the nudge atomically |
+| Abandonment could duplicate or partially persist a case | Conversation lock plus one transaction for case creation and session removal |
+| Shared access lacked accountable tenant isolation | Named accounts, salted scrypt hashes, opaque revocable sessions, login throttling, explicit memberships and named console audit events |
+| Erasure/retention and private evidence were incomplete | Merchant-scoped erasure, scheduled retention across payloads and cases, private photo persistence and authenticated evidence routes |
+| Simulator recovery and customer language were incomplete | One-shot failure injection, pending-delivery retry, protection against simulated actions on real conversations, English/Turkish prompts and selected-merchant continuity |
+| Automation could silently skip failed work | CI runs checks with disposable PostgreSQL; maintenance workflow fails on missing secrets or nonzero failure summaries |
+
+#### Verification
+
+- 185 unit tests passed across 28 files.
+- 146 database integration tests passed across 12 files on local PostgreSQL 17.
+- Final targeted checks passed with two additional database regressions (12 repair
+  tests total) and one additional API regression (3 simulator API tests total).
+- Lint, TypeScript checking, and a clean production build passed.
+- Independent database connections exercise concurrent intake, duplicate workers,
+  nudge races, abandonment rollback, deletion, retention, account revocation,
+  and merchant-scoped media access.
+- Browser simulation verified a failed Turkish reply can be retried without
+  restarting intake, and an English photo intake completes with routing and evidence.
+- The production build's browser check confirmed named-account login, a merchant
+  selector restricted to the account's membership, and successful private image loading.
+
+The test database and all verification accounts/messages were synthetic. Meta
+media retrieval is tested with mocked HTTP responses; live Meta delivery remains
+an external deployment check.
+
+#### Rollout and limitations
+
+Apply the five additive migrations dated `20260909` before running the new app,
+then provision named accounts and merchant memberships. Follow [DEPLOYMENT.md](DEPLOYMENT.md)
+for the deployment sequence. Existing shared-passcode cookies are invalid.
+
+All application tables have RLS enabled without public API policies. Server SQL
+must use a trusted backend database role with the required access; browsers must
+never receive that credential. Tenant isolation is also enforced in server code.
+
+Private image bytes currently live in PostgreSQL (JPEG/PNG/WebP, maximum 10 MB each).
+This is a deliberate implementation choice instead of a separate storage bucket;
+object storage can replace it when media volume warrants that work. Previously
+expired Meta-only references cannot be recovered. Previously deleted taxonomy
+without remaining metadata is shown with a placeholder, not reconstructed.
+
+Retention permanently removes expired records when the maintenance endpoint runs.
+Review each merchant's retention configuration before enabling the scheduler on
+existing data. Database backup expiry and external provider copies remain operational
+responsibilities outside the application's deletion transaction.
+
+Inbound processing has one committed state transition per message ID. WhatsApp
+delivery is **at-least-once**: if Meta accepts a send but the connection or final
+database commit fails, retrying can send the same reply again. A database outbox
+cannot guarantee exactly-once effects in another service. Workers are bounded
+batches and require a functioning scheduler to drain persistent work.
+
+Ikas integration, Meta Flow, granular account roles, and real-merchant pilot
+measurements remain separate roadmap work. The privacy controls here implement
+application behavior; they do not establish a legal-compliance certification.
+
+---
+
+## 16. September 2026 follow-up — user findings
+
+Verification completed across the September 15–22, 2026 sessions.
+Baseline: repair commit `927f61a`. These follow-up fixes are local and have not
+been deployed. Hosted inspection was read-only; no production records were edited.
+
+### Hosted evidence
+
+The Vercel app still displayed the shared-passcode login and the older UI during
+inspection, rather than the named-account login introduced by the repair batch.
+Pushing that commit did not establish that this production URL was updated.
+
+- [Return, TR100432](https://chicchat-sepia.vercel.app/console/c39af008-a001-41ca-a66b-65cdefe57d63):
+  the transcript repeatedly submits `it doesn't fit`, followed by the bot asking
+  for a listed reason. `stop` is treated as another invalid answer. Selecting
+  `wrong_size` and then the condition completes the case.
+- [Exchange, TR100999](https://chicchat-sepia.vercel.app/console/1c20ab67-4f9c-476e-909a-c1a504e98047):
+  the Flow item submission succeeds. The later `too tight` reason is repeatedly
+  rejected. A manual reason selection completes the case.
+- The hosted case list uses month/day/year and opens the read-only case detail.
+  It also contains numeric-only orders, including `123456`; `TR` is not mandatory.
+- The deployed Demo Apparel policy accepts `^[A-Z0-9]{4,}$`, without a required prefix.
+
+### Findings and corrections
+
+| Finding | Cause / distinction | Local correction |
+| --- | --- | --- |
+| Policy/configuration resets while adding categories, subcategories or fields | Each action redirected the editor. Unsaved edits could be lost. Category writes do not overwrite saved policy; database regression tests confirm this. The original hosted reset was not reproduced by mutating production. | Save sections in place, preserve unrelated drafts, display inline errors/saved status, reset only successful creation forms. Remount the editor when switching merchants. |
+| “Enum” is unclear | It means a predefined list of allowed answers. A text field allows a written answer instead. | Present “Pick from a list,” “Free text,” “Photo,” and “Item description / reference,” with examples and the 10-choice limit. Preserve stored type identifiers and routing values. |
+| Cases versus Console | Cases is the full list with filters/statistics. Console is the work queue with priority, status changes and internal notes. | Explain both pages and link case order numbers and “Work on case” directly to the console. |
+| TR-prefixed order numbers | Demo seeds/presets use TR examples. Normalization removes separators and uppercases; it does not prepend TR. Each merchant can configure a validation pattern. | Explain the demo convention and use a neutral order-search placeholder. |
+| US date order | Date rendering inherited the server's default locale/time zone. | Use DD/MM/YYYY and 24-hour Istanbul time consistently for shared case/console timestamps and simulator activity. |
+| Messy-order and Flow preset loops | UI presets still contained invalid free-text reasons even though earlier integration tests used corrected answers. The runner retried the same answer up to 12 times. | Use the valid `wrong_size` choice; test the actual UI presets; pause on a repeated question, missing answer, or processing failure. Let the user continue manually. |
+| Cannot stop a simulation | No cancellation control for automatic playback; typing `stop` is ordinary intake input. | Add “Stop preset” and label the existing reset action “End conversation & reset.” Stop prevents subsequent scripted sends; an in-flight request may finish. Reset clears the simulated session and unattached transcript, preserving completed cases. |
+| Aging a session seems ineffective | Aging changed timestamps but required a separate maintenance click. | “Age & check” immediately runs inactivity handling for that simulated conversation and reports counts. Return the abandoned case for inspection when one is created. |
+| Nudge hides choice buttons | The chat rendered choices only from its final bot message, which becomes the nudge. | Treat inactivity messages as notifications; retain the pending choices while the session remains active and remove them when it ends. |
+
+### Verification
+
+- 195 unit tests passed, including preset interruption/rejection and nudge-choice regressions.
+- Production build and TypeScript validation passed on the final source.
+- ESLint passed for the source directory, middleware and Next.js configuration; git diff whitespace checks also passed.
+- 153 PostgreSQL integration tests passed earlier in this batch against a disposable
+  local `chicchat_test` database. They exercise the actual UI presets, preservation
+  of saved policy, immediate nudge, one-nudge behavior and abandoned-case creation.
+- Local browser checks confirmed unsaved policy and category-name drafts survive
+  category/subcategory/field creation; choice fields save correctly; both reported
+  presets complete; aging five minutes immediately produces one nudge.
+- No hosted migration, account provisioning, deployment, or real WhatsApp send was performed.
+
+### Rollout
+
+These follow-up fixes add no database migrations or dependencies. Deploying the
+full repaired application still requires the five migrations and named-account
+setup documented in [DEPLOYMENT.md](DEPLOYMENT.md). Existing historical transcripts
+remain unchanged; the fixes prevent the same preset behavior on new runs.
+
+---
+
+## 17. Appendix — commands
 
 ```bash
 npm run dev            # local app (open at localhost:3000)
@@ -599,4 +764,4 @@ whole stack back, `--ignore-health-check` gets the database up; never exclude
 
 ---
 
-*End of log. v0.2 closed 2026-08-28 at commit `fd2d23e`.*
+*End of log. v0.2 closed 2026-08-28 at commit `fd2d23e`; September repairs at `927f61a`, user-findings follow-up at `a013c39`.*
