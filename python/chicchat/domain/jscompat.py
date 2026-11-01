@@ -133,7 +133,7 @@ def js_includes(items: list[Any], value: object) -> bool:
 
 def js_truthy(value: object) -> bool:
     """JavaScript truthiness: empty lists/dicts are truthy, unlike Python (P10)."""
-    if value is None or value is False:
+    if value is None or value is False or isinstance(value, JsUndefined):
         return False
     if is_js_number(value):
         return not (value == 0 or math.isnan(float(value)))  # type: ignore[arg-type]
@@ -385,3 +385,99 @@ def js_json_stringify(value: object) -> str:
         return item
 
     return json.dumps(fix(value), ensure_ascii=False, separators=(",", ":"))
+
+
+def js_number_to_string(value: float) -> str:
+    """``String(number)``: "1" not "1.0", "1e+21", "1.5e-7", "NaN", "Infinity"."""
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "Infinity" if value > 0 else "-Infinity"
+    if value == 0:
+        return "0"
+    sign = "-" if value < 0 else ""
+    digits, exponent = _shortest_digits(abs(value))
+    # `exponent` is the position of the decimal point relative to `digits`.
+    n = exponent
+    k = len(digits)
+    if k <= n <= 21:
+        return sign + digits + "0" * (n - k)
+    if 0 < n <= 21:
+        return sign + digits[:n] + "." + digits[n:]
+    if -6 < n <= 0:
+        return sign + "0." + "0" * (-n) + digits
+    e = n - 1
+    mantissa = digits[0] + ("." + digits[1:] if k > 1 else "")
+    return f"{sign}{mantissa}e{'+' if e >= 0 else '-'}{abs(e)}"
+
+
+def _shortest_digits(value: float) -> tuple[str, int]:
+    """Shortest round-trip decimal digits and point position (as ECMAScript)."""
+    text = repr(value)
+    mantissa, _, exp_text = text.partition("e")
+    exp = int(exp_text) if exp_text else 0
+    whole, _, frac = mantissa.partition(".")
+    if frac == "0":
+        frac = ""
+    digits = (whole + frac).lstrip("0")
+    point = len(whole) + exp
+    if whole == "0":
+        stripped = frac.lstrip("0")
+        point = exp - (len(frac) - len(stripped))
+        digits = stripped
+    digits = digits.rstrip("0") or "0"
+    return digits, point
+
+
+def js_string(value: object) -> str:
+    """``String(value)`` for JSON-shaped scalars."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if is_js_number(value):
+        return js_number_to_string(float(value))  # type: ignore[arg-type]
+    return str(value)
+
+
+class JsUndefined:
+    """JavaScript's ``undefined``, where it must be told apart from ``null``."""
+
+    _instance: JsUndefined | None = None
+
+    def __new__(cls) -> JsUndefined:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "undefined"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+UNDEFINED = JsUndefined()
+
+
+def js_get(obj: object, name: str) -> object:
+    """``obj.name`` — raises TypeError on null/undefined, as JavaScript does."""
+    if obj is None or obj is UNDEFINED:
+        raise TypeError(f"Cannot read properties of {obj!r} (reading '{name}')")
+    if isinstance(obj, dict):
+        return obj.get(name, UNDEFINED)
+    if isinstance(obj, str) and name == "length":
+        return js_length(obj)
+    return UNDEFINED
+
+
+def js_opt(obj: object, name: str) -> object:
+    """``obj?.name``."""
+    if obj is None or obj is UNDEFINED:
+        return UNDEFINED
+    return js_get(obj, name)
+
+
+def js_nullish(value: object, fallback: object) -> object:
+    """``value ?? fallback``."""
+    return fallback if value is None or value is UNDEFINED else value

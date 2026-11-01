@@ -32,10 +32,12 @@ from chicchat.domain.cases.workflow import (
     plan_transition,
     priority_rank,
 )
-from chicchat.domain.result import Err, Ok
-from chicchat.domain.rules import RuleContext
 
 # --- status transitions (SPEC §9) ---------------------------------------------
+from chicchat.domain.dates import parse_js_date
+from chicchat.domain.result import Err, Ok
+from chicchat.domain.rules import RuleContext
+from tests.golden import assert_golden, ts_json
 
 
 def test_walks_the_main_path_open_in_progress_resolved_closed() -> None:
@@ -448,8 +450,6 @@ def test_says_so_when_no_rule_matched() -> None:
 
 # --- golden -------------------------------------------------------------------------
 
-from chicchat.domain.dates import parse_js_date  # noqa: E402
-from tests.golden import assert_golden, ts_json  # noqa: E402
 
 _GOLDEN_NOW = parse_js_date("2026-07-29T12:00:00Z")
 

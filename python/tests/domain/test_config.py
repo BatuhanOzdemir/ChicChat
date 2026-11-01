@@ -13,6 +13,7 @@ from chicchat.domain.config.forms import (
 )
 from chicchat.domain.config.keys import is_valid_key, slugify_key
 from chicchat.domain.result import Err, Ok
+from tests.golden import assert_golden, ts_json
 
 
 def test_accepts_a_complete_policy() -> None:
@@ -207,8 +208,6 @@ def test_rejects_empty_leading_digit_or_punctuated_keys() -> None:
 
 
 # --- golden -------------------------------------------------------------------------
-
-from tests.golden import assert_golden, ts_json  # noqa: E402
 
 
 def test_matches_the_typescript_implementation() -> None:

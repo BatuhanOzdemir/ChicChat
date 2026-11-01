@@ -463,6 +463,24 @@ Add items here as they are found; each becomes its own change after the port.
   detail page, and similar "v0.2" comments (noted in v0.3 Step 0).
 - Comment in `supabase/migrations/20260729120000_agent_console.sql` still points
   to the deleted `docs/RETROFIT.md` (migrations are not edited).
+- `parseInbound` crashes on a `null` entry, change or message (`null.changes`
+  throws in JavaScript); the webhook then answers 500 and Meta retries the same
+  payload. The Python port reproduces this exactly; fix both in one change.
+
+### Deliberate, documented differences in the port
+
+- **Dates:** `new Date(text)` accepted V8's legacy formats (`June 22, 2026`,
+  `12/31/2026`); the port parses ISO-8601 only (every real input is a database
+  timestamp). ISO behaviour, including `2026-02-30` rolling to 2 March, matches.
+- **Static assets:** `/static/` is an open (ungated) path, replacing Next.js's
+  `/_next/`.
+- **Merchant regexes:** JavaScript syntax is translated (`\d`/`\w`/`\b` stay
+  ASCII, `$` means end of input, `(?<name>…)` named groups). Inside a bracket,
+  `\D`/`\W`/`\S` use Python's ASCII mode, so `[\S]` treats non-ASCII spaces
+  (e.g. U+00A0) as non-space. Patterns Python cannot compile are rejected by
+  the editor; check stored patterns before cutover (P9).
+- **Classifier hand-off:** a `null` value in `pendingInitial` is skipped instead
+  of crashing (nothing writes one yet; v0.3 will).
 
 ---
 
@@ -474,3 +492,4 @@ Updated at the end of every port step, so work can resume from here.
 |---|---|---|
 | Baseline | ✓ | TypeScript: 195 unit tests, 153 DB tests pass on local PostgreSQL 16 (2026-11-01) |
 | Port Step 0 | ✓ | `python/` skeleton (uv, ruff, mypy strict, pytest, import-linter contracts for domain purity and layers), Python CI job, golden exporter (`scripts/golden/`) and comparison helper (`python/tests/golden.py`) |
+| Port Step 1 | ✓ | `chicchat/domain` complete: normalize, rules, intake, cases, config, whatsapp, simulator, logging, auth, nav. 175/175 TypeScript domain tests ported (by name, checked by script) plus 19 extra; golden comparisons over ~25,000 recorded TypeScript calls match exactly. `jscompat.py`/`dates.py` hold the JavaScript semantics. |
