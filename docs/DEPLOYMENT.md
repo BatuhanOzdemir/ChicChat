@@ -167,6 +167,9 @@ subsequent runs; monitor queue backlog as traffic grows.
 
 ### 5a. Make the staging database (a copy of production)
 
+Only needed once real merchant data exists. Until then the hosted database is
+updated in place (PORT.md §8).
+
 Rehearsed on 2026-11-17 against a local copy shaped like production (seven
 migrations, 15 tables). It needs Docker; the `postgres:17` image supplies
 `pg_dump`, `pg_restore` and `psql` at least as new as Supabase's server.

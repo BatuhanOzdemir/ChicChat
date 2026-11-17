@@ -439,6 +439,13 @@ quiet week of Python in production.
 
 ## 8. Cutover plan (Port Step 7)
 
+**Simplified 2026-11-17:** ChicChat has no real users or data yet, so the
+cutover is direct: update the hosted database in place (one SQL script: the
+five September migrations plus the owner's console account), create the
+Python Vercel project, point Meta and `MAINTENANCE_URL` at it, test, and
+delete the TypeScript project. No staging copy and no fallback week. The full
+procedure below is kept for when real merchants exist.
+
 Hosting is Vercel (D9): a **second Vercel project** built from this repository
 with Root Directory `python`. The existing project keeps building the
 TypeScript app from `main` and serving customers until step 5 below.

@@ -16,6 +16,9 @@ product behaviour; the Handbook wins on engineering standards.
 4. Commit after each approved step (conventional commits).
 5. No skipping ahead, no early scaffolding of future steps.
 6. Ambiguity → ask me one focused question, don't guess.
+6a. Talk to me only when you need something from me: then give exact,
+   numbered steps. Work that needs nothing from me just gets done (still
+   committed, reported per the step template where a plan step ends).
 6b. The simulator is the standing test bench: from Step 1 onward, every step
    with user-visible behaviour must be demonstrable in the simulator, and each
    step extends the simulator with whatever controls its features need
@@ -39,6 +42,12 @@ Awaiting sign-off for Step N+1.
 
 ## Where we are
 
+- **Nothing is live yet (owner, 2026-11-17).** No customers, merchants or
+  real data: the hosted database and WhatsApp number hold test data and the
+  owner is the only user. Downtime, breaking the hosted app, and changing the
+  hosted database directly are acceptable; no staging copies or fallback
+  periods are needed until real merchants exist.
+- Work happens on `main` (owner, 2026-11-17); no long-lived branches.
 - **v0.2** (Steps 0–8) is complete; the step-by-step record is in
   `docs/DEVELOPMENT-LOG.md` §7, and the September 2026 repair batch and its
   follow-up fixes are §§15–16.
