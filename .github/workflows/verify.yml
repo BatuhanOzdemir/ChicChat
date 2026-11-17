@@ -5,7 +5,7 @@ on:
 permissions:
   contents: read
 jobs:
-  verify:
+  python:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -19,16 +19,22 @@ jobs:
           --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:local_ci_test@127.0.0.1:5432/chicchat_test
+    defaults:
+      run:
+        working-directory: python
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: astral-sh/setup-uv@v5
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: node scripts/prepare-test-db.mjs
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
-      - run: npm run test:db
-      - run: npm run build
+          version: "0.11.32"
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run lint-imports
+      - run: uv run pytest
+      - run: uv run python -m chicchat.scripts.prepare_test_db
+      - run: uv run pytest -m db
+      # Template smoke test: every page renders in the browser walkthrough.
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest -m browser

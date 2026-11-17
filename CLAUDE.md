@@ -20,8 +20,10 @@ product behaviour; the Handbook wins on engineering standards.
    with user-visible behaviour must be demonstrable in the simulator, and each
    step extends the simulator with whatever controls its features need
    (SPEC §7). "Works but can't be shown in the simulator" fails the gate.
-7. Definition of Done per step: gate ✓ · lint ✓ · typecheck ✓ · tests ✓ ·
-   Handbook standards respected · committed · report posted · sign-off received.
+7. Definition of Done per step: gate ✓ · lint ✓ (`ruff`) · typecheck ✓ (`mypy`)
+   · architecture ✓ (`lint-imports`) · tests ✓ (`pytest`, `-m db`, `-m browser`
+   when pages change) · Handbook standards respected · committed · report
+   posted · sign-off received. All commands run in `python/` (see README).
 
 ### Step report template
 ```
@@ -47,6 +49,22 @@ Awaiting sign-off for Step N+1.
   work (Flows, templates, new message types) unless we agree it first. All v0.3
   behaviour is built and demonstrated in the simulator.
 - The old rule that v0.3 waits for a real-merchant demo is **dropped**.
+- **Python port first (November 2026):** before v0.3 Step 1, the codebase is
+  ported from TypeScript to Python following `docs/PORT.md` (Port Steps 0–7,
+  same working agreement). v0.3 Steps 1–5 are then built in Python.
+  The user confirmed Python + FastAPI and the hosting direction on 2026-11-01
+  and **authorized running Port Steps 0–6 without per-step sign-off**; Port
+  Step 7 (staging, cutover, removal of TypeScript) needs sign-off again.
+  Progress is tracked in `docs/PORT.md` §10. Port Steps 0–6 are complete
+  (Python app in `python/`). Port Step 7, part 1 is complete (November 2026):
+  the side-by-side check against the TypeScript app found no unexplained
+  difference, and hosting is **Vercel** (a second project with Root Directory
+  `python`). On the owner's request the TypeScript code was **removed from
+  `main` on 2026-11-17**, before cutover (commit `b655d64` is the last with it).
+  The project is Python only. What remains of the port is the owner's
+  part 2: create the Python Vercel project, staging, cutover
+  (`docs/PORT.md` §8); the retired TypeScript Vercel project stays as the
+  fallback for one quiet week after cutover.
 
 ---
 

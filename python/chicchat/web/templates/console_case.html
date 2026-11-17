@@ -1,0 +1,100 @@
+{% extends "app_base.html" %}
+{% from "ui.html" import status_badge, priority_badge, queue_name, panel, error_box, evidence_photos, csrf with context %}
+{% block title %}{{ detail.category_label }} · Agent console{% endblock %}
+{# One case, as an agent works it (SPEC §9). #}
+{% block content %}
+{% set EVENT_ICON = {"routing": "→", "status_change": "⇄", "note": "✎"} %}
+<main class="mx-auto max-w-5xl p-6 text-zinc-900 dark:text-zinc-100">
+  <header class="mb-4">
+    <a class="text-xs underline" href="/console">← work queue</a>
+    <h1 class="mt-1 flex flex-wrap items-center gap-2 text-2xl font-semibold">
+      {{ detail.category_label }} {{ status_badge(workflow.status) }} {{ priority_badge(workflow.priority) }}
+      <span class="font-mono text-xs font-normal text-zinc-500">{{ queue_name(workflow.queue) }}</span>
+    </h1>
+    <p class="text-sm text-zinc-500">
+      <code>{{ detail.category_key }}</code>{% if detail.subcategory_key %} / <code>{{ detail.subcategory_key }}</code>{% endif %}
+      · customer {{ detail.customer_wa_id | masked }} · opened {{ detail.created_at | datetime }} · intake took {{ intake_seconds | duration }}
+      {%- if workflow.resolved_at %} · closed {{ workflow.resolved_at | datetime }}{% endif %} ·
+      <a class="underline" href="/cases/{{ detail.id }}">merchant view</a>
+    </p>
+  </header>
+  {% if error %}{{ error_box(error) }}{% endif %}
+  <div class="space-y-4">
+    {% call panel("Actions", "internal only — nothing is sent to the customer") %}
+    {% if not moves %}
+    <p class="text-sm text-zinc-500">This case is {{ workflow.status }}; there is nowhere left to move it.</p>
+    {% else %}
+    <form method="post" action="/console/{{ detail.id }}/status" class="flex flex-wrap items-end gap-2">
+      {{ csrf() }}
+      <label class="flex flex-1 flex-col gap-1 text-xs text-zinc-500">Note (optional, saved with the change)
+        <input class="w-full rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900" name="note" placeholder="refund approved, awaiting carrier pickup">
+      </label>
+      <div class="flex flex-wrap gap-2">
+        {% for to in moves %}
+        <button type="submit" name="to" value="{{ to }}" class="rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900">{{ to | replace("_", " ") }}</button>
+        {% endfor %}
+      </div>
+    </form>
+    {% endif %}
+    <form method="post" action="/console/{{ detail.id }}/note" class="mt-3 flex items-end gap-2">
+      {{ csrf() }}
+      <label class="flex flex-1 flex-col gap-1 text-xs text-zinc-500">Internal note
+        <input class="w-full rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900" name="note" placeholder="called the carrier, reference 44821">
+      </label>
+      <button type="submit" class="rounded border border-zinc-300 px-3 py-1.5 text-xs font-medium hover:border-zinc-500 dark:border-zinc-700">Add note</button>
+    </form>
+    {% endcall %}
+
+    {% call panel("Handoff package", "normalized values, ready to act on") %}
+    <dl class="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+      {% for key, value in handoff.fields.items() %}
+      <div class="flex gap-2"><dt class="font-mono text-xs text-zinc-500">{{ key }}</dt><dd>{{ value if value is not none else "—" }}</dd></div>
+      {% endfor %}
+    </dl>
+    {% if handoff["items"] %}
+    <ul class="mt-3 space-y-1 text-sm">
+      {% for item in handoff["items"] %}
+      <li><span class="font-mono text-xs">{{ item.line_item_id }}</span> {{ item.title or "" }}{% if item.variant %}<span class="text-zinc-500"> · {{ item.variant }}</span>{% endif %} <span class="text-xs text-zinc-500">×{{ item.qty }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {{ evidence_photos(detail.id, handoff.photos) }}
+    <details class="mt-3">
+      <summary class="cursor-pointer text-xs text-zinc-500">raw JSON (for pasting into another tool)</summary>
+      <pre class="mt-2 overflow-x-auto rounded bg-zinc-100 p-3 text-xs dark:bg-zinc-900">{{ handoff_json }}</pre>
+    </details>
+    {% endcall %}
+
+    {% call panel("Transcript (" ~ (transcript | length) ~ ")", "read-only — replying from ChicChat is not in v0.2") %}
+    {% if not transcript %}
+    <p class="text-sm text-zinc-500">No messages recorded for this case.</p>
+    {% else %}
+    <ol class="space-y-2 text-sm">
+      {% for entry in transcript %}
+      <li class="{{ '' if entry.direction == 'inbound' else 'ps-6 text-zinc-600 dark:text-zinc-400' }}">
+        <div class="text-xs text-zinc-500">{{ (detail.customer_wa_id | masked) if entry.direction == "inbound" else "ChicChat" }} · {{ entry.kind }} · {{ entry.created_at | datetime }}</div>
+        <div class="whitespace-pre-wrap">{{ entry.body if entry.body is not none else "—" }}</div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+    {% endcall %}
+
+    {% call panel("History") %}
+    <ol class="space-y-1 text-sm">
+      {% if not events %}<li class="text-sm text-zinc-500">Nothing yet.</li>{% endif %}
+      {% for event in events %}
+      <li class="flex gap-3">
+        <span class="w-40 shrink-0 text-xs text-zinc-500">{{ event.created_at | datetime }}</span>
+        <span class="w-4 shrink-0">{{ EVENT_ICON.get(event.kind, "·") }}</span>
+        <span>
+          {% if event.kind == "status_change" %}{{ event.from_status }} → <strong>{{ event.to_status }}</strong>{% if event.body %} · {{ event.body }}{% endif %}{% else %}{{ event.body or "" }}{% endif %}
+          <span class="ms-2 text-xs text-zinc-500">{{ event.actor }}</span>
+        </span>
+      </li>
+      {% endfor %}
+    </ol>
+    {% endcall %}
+  </div>
+</main>
+{% endblock %}

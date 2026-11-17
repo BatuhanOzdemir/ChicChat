@@ -1,0 +1,213 @@
+{% extends "app_base.html" %}
+{% from "ui.html" import merchant_switcher, error_box, csrf with context %}
+{% block title %}Merchant configuration · ChicChat{% endblock %}
+{#
+  The taxonomy editor (SPEC §8). Every form with class "config-form" is saved in
+  place by /static/config.js, which keeps unsaved edits in other sections when
+  the page refreshes. Without JavaScript the forms still work (full page post).
+#}
+{% set input = "rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900" %}
+{% set small_button = "rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800" %}
+{% set primary_button = "rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900" %}
+{% set danger_button = "rounded border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950" %}
+
+{% macro field(label, width="w-full") -%}
+<label class="flex flex-col gap-1 text-xs text-zinc-500 {{ width }}">{{ label }}{{ caller() }}</label>
+{%- endmacro %}
+
+{% macro config_form(action, key, class="", reset=False) -%}
+<form method="post" action="/config/{{ action }}" class="config-form {{ class }}" data-form-key="{{ key }}" {% if reset %}data-reset-on-success{% endif %}>
+  {{ csrf() }}
+  {{ caller() }}
+  <p class="config-form-status w-full text-xs" hidden></p>
+</form>
+{%- endmacro %}
+
+{% macro type_options(selected) -%}
+{% for t in field_types %}<option value="{{ t }}" {% if t == selected %}selected{% endif %}>{{ field_labels[t] }}</option>{% endfor %}
+{%- endmacro %}
+
+{% macro normalize_options(selected) -%}
+<option value="">none</option>
+{% for rule in normalize_rules %}<option value="{{ rule }}" {% if rule == selected %}selected{% endif %}>{{ rule }}</option>{% endfor %}
+{%- endmacro %}
+
+{% block content %}
+{% set merchant = config.merchant %}
+{% set settings = config.settings %}
+<main dir="{{ 'rtl' if merchant.rtl else 'ltr' }}" class="mx-auto max-w-5xl p-6 text-zinc-900 dark:text-zinc-100" id="config-main">
+  <header class="mb-4">
+    {% if erased %}<p role="status">Customer data deleted.</p>{% endif %}
+    <section class="my-6 rounded border border-red-300 p-4">
+      <h2 class="font-semibold">Delete customer data</h2>
+      <p class="text-sm">Permanently removes this merchant’s cases, transcripts, evidence, sessions and pending messages for the number. This cannot be undone.</p>
+      <form method="post" action="/privacy/erase" class="mt-3 flex flex-wrap items-end gap-3">
+        {{ csrf() }}
+        <label class="text-sm">Phone including country code
+          <input name="phone" required pattern="[0-9]{7,15}" class="ms-2 rounded border p-2" placeholder="905550001234">
+        </label>
+        <label class="text-sm"><input type="checkbox" name="confirm" value="delete" required> I confirm permanent deletion</label>
+        <button class="rounded bg-red-700 px-3 py-2 text-white">Delete data</button>
+      </form>
+    </section>
+    <div class="flex flex-wrap items-baseline justify-between gap-2">
+      <h1 class="text-2xl font-semibold">Merchant configuration</h1>
+      {{ merchant_switcher(merchant_ctx, "/config") }}
+    </div>
+    <p class="text-sm text-zinc-500">{{ merchant.name }} · locale <code>{{ merchant.locale }}</code> · {{ "RTL" if merchant.rtl else "LTR" }} · {{ enabled_count }}/{{ config.categories | length }} categories enabled</p>
+    <p class="text-xs text-zinc-500">WhatsApp number
+      {%- if not channels %}: none linked — inbound messages cannot be routed here yet
+      {%- else %}: {% for c in channels %}{{ c.display_number or c.phone_number_id }}{% if not c.is_primary %} (secondary){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+    </p>
+  </header>
+
+  {% if error %}{{ error_box(error) }}{% endif %}
+
+  <div class="space-y-4" data-merchant="{{ merchant.id }}">
+    <section class="rounded-lg border p-4 border-zinc-200 dark:border-zinc-800">
+      <h2 class="mb-3 font-medium">Policy</h2>
+      <p class="mb-3 text-xs text-zinc-500">Save policy to apply these settings. Editing categories keeps your unsaved policy changes here. Order numbers follow your store’s pattern; TR is only used in demo examples.</p>
+      {% call config_form("policy", "policy", "space-y-3") %}
+      <div class="flex flex-wrap gap-4">
+        {% call field("Return window (days)", "w-40") %}<input class="{{ input }}" type="number" min="0" name="return_window_days" value="{{ settings.return_window_days }}">{% endcall %}
+        {% call field("Refund SLA (days)", "w-40") %}<input class="{{ input }}" type="number" min="0" name="refund_sla_days" value="{{ settings.refund_sla_days }}">{% endcall %}
+        {% call field("Nudge after (minutes)", "w-40") %}<input class="{{ input }}" type="number" min="1" name="nudge_after_minutes" value="{{ settings.nudge_after_minutes }}">{% endcall %}
+        {% call field("Abandon after (hours)", "w-40") %}<input class="{{ input }}" type="number" min="1" name="abandon_after_hours" value="{{ settings.abandon_after_hours }}">{% endcall %}
+        {% call field("Retention (months)", "w-40") %}<input class="{{ input }}" type="number" min="0" name="retention_months" value="{{ settings.retention_months }}">{% endcall %}
+      </div>
+      <div class="flex flex-wrap gap-4">
+        {% call field("KVKK aydınlatma metni URL", "w-96") %}<input class="{{ input }}" name="kvkk_url" placeholder="https://…" value="{{ settings.kvkk_url or '' }}">{% endcall %}
+        {% call field("Order-id pattern (regex)", "w-64") %}<input class="{{ input }}" name="order_id_regex" value="{{ settings.order_id_regex or '' }}">{% endcall %}
+      </div>
+      <button type="submit" class="{{ primary_button }}">Save policy</button>
+      {% endcall %}
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="font-medium">Categories</h2>
+      {% for category in config.categories %}
+      {% set rules = rules_by_category[category.id] %}
+      <details class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800" data-details-key="category-{{ category.id }}">
+        <summary class="cursor-pointer text-sm font-medium">
+          {{ category.label }} <code class="text-xs font-normal text-zinc-500">{{ category.key }}</code>
+          {% if not category.enabled %}<span class="ms-2 rounded bg-zinc-200 px-1.5 py-0.5 text-xs font-normal text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">disabled</span>{% endif %}
+          <span class="ms-2 text-xs font-normal text-zinc-500">{{ category.subcategories | length }} sub · {{ category.fields | length }} fields · {{ rules | length }} rules</span>
+        </summary>
+        <div class="mt-4 space-y-5">
+          {% call config_form("save-category", "category-" ~ category.id, "flex flex-wrap items-end gap-3") %}
+          <input type="hidden" name="id" value="{{ category.id }}">
+          <input type="hidden" name="key" value="{{ category.key }}">
+          {% call field("Label", "w-64") %}<input class="{{ input }}" name="label" value="{{ category.label }}">{% endcall %}
+          {% call field("Order", "w-20") %}<input class="{{ input }}" type="number" name="sort_order" value="{{ category.sort_order }}">{% endcall %}
+          <label class="flex items-center gap-2 pb-1.5 text-xs"><input type="checkbox" name="enabled" {% if category.enabled %}checked{% endif %}> Enabled</label>
+          <button type="submit" class="{{ small_button }}">Save</button>
+          {% endcall %}
+
+          <div>
+            <h3 class="mb-2 text-xs font-semibold uppercase text-zinc-500">Subcategories</h3>
+            <ul class="mb-2 space-y-1">
+              {% for sub in category.subcategories %}
+              <li class="flex items-center gap-2 text-sm">
+                <span>{{ sub.label }}</span> <code class="text-xs text-zinc-500">{{ sub.key }}</code>
+                {% call config_form("remove-subcategory", "remove-sub-" ~ sub.id, "ms-auto") %}<input type="hidden" name="id" value="{{ sub.id }}"><button type="submit" class="{{ danger_button }}">Delete</button>{% endcall %}
+              </li>
+              {% endfor %}
+            </ul>
+            {% call config_form("add-subcategory", "add-sub-" ~ category.id, "flex flex-wrap items-end gap-2", reset=True) %}
+            <input type="hidden" name="category_id" value="{{ category.id }}">
+            {% call field("New subcategory label", "w-56") %}<input class="{{ input }}" name="label" required>{% endcall %}
+            {% call field("Order", "w-20") %}<input class="{{ input }}" type="number" name="sort_order" value="0">{% endcall %}
+            <button type="submit" class="{{ small_button }}">Add</button>
+            {% endcall %}
+          </div>
+
+          <div>
+            <h3 class="mb-2 text-xs font-semibold uppercase text-zinc-500">Fields (asked in this order)</h3>
+            <p class="mb-3 text-xs text-zinc-500">Free text lets customers write their answer. Pick from a list gives them up to 10 choices to tap: enter one per line, for example Wrong size, Poor quality, Other. Photo asks for an image; Item description / reference asks which item they mean.</p>
+            <ul class="mb-2 space-y-2">
+              {% for f in category.fields %}
+              <li>
+                {% call config_form("save-field", "field-" ~ f.id, "flex flex-wrap items-end gap-2 rounded border border-zinc-100 p-2 dark:border-zinc-800") %}
+                <input type="hidden" name="id" value="{{ f.id }}">
+                <input type="hidden" name="key" value="{{ f.key }}">
+                {% call field("Question label", "w-48") %}<input class="{{ input }}" name="label" value="{{ f.label if f.label is not none else f.key }}">{% endcall %}
+                {% call field("Type", "w-52") %}<select class="{{ input }}" name="type">{{ type_options(f.type) }}</select>{% endcall %}
+                {% call field("Choices (for Pick from a list)", "w-56") %}<textarea class="{{ input }}" name="enum_values" placeholder="Wrong size&#10;Poor quality&#10;Other" rows="2">{{ (f.enum_values or []) | join("\n") }}</textarea>{% endcall %}
+                {% call field("Normalize", "w-36") %}<select class="{{ input }}" name="normalize_rule">{{ normalize_options(f.normalize_rule or "") }}</select>{% endcall %}
+                {% call field("Order", "w-20") %}<input class="{{ input }}" type="number" name="sort_order" value="{{ f.sort_order }}">{% endcall %}
+                <label class="flex items-center gap-1 pb-1.5 text-xs"><input type="checkbox" name="required" {% if f.required %}checked{% endif %}> Required</label>
+                <button type="submit" class="{{ small_button }}">Save</button>
+                {% endcall %}
+                {% call config_form("remove-field", "remove-field-" ~ f.id, "mt-1") %}<input type="hidden" name="id" value="{{ f.id }}"><button type="submit" class="{{ danger_button }}">Delete {{ f.key }}</button>{% endcall %}
+              </li>
+              {% endfor %}
+            </ul>
+            {% call config_form("add-field", "add-field-" ~ category.id, "flex flex-wrap items-end gap-2", reset=True) %}
+            <input type="hidden" name="category_id" value="{{ category.id }}">
+            {% call field("New field label", "w-44") %}<input class="{{ input }}" name="label" required>{% endcall %}
+            {% call field("Type", "w-52") %}<select class="{{ input }}" name="type">{{ type_options("string") }}</select>{% endcall %}
+            {% call field("Choices (for Pick from a list)", "w-56") %}<textarea class="{{ input }}" name="enum_values" placeholder="Wrong size&#10;Poor quality&#10;Other" rows="2"></textarea>{% endcall %}
+            {% call field("Normalize", "w-36") %}<select class="{{ input }}" name="normalize_rule">{{ normalize_options("") }}</select>{% endcall %}
+            {% call field("Order", "w-20") %}<input class="{{ input }}" type="number" name="sort_order" value="90">{% endcall %}
+            <label class="flex items-center gap-1 pb-1.5 text-xs"><input type="checkbox" name="required" checked> Required</label>
+            <button type="submit" class="{{ small_button }}">Add field</button>
+            {% endcall %}
+          </div>
+
+          <div>
+            <h3 class="mb-2 text-xs font-semibold uppercase text-zinc-500">Routing rules <span class="font-normal normal-case">— evaluated top to bottom, first match wins</span></h3>
+            <ul class="mb-2 space-y-1 text-sm">
+              {% for rule in rules %}
+              <li class="flex items-start gap-2">
+                <span class="w-6 shrink-0 text-xs text-zinc-500">#{{ rule.sort_order }}</span>
+                <div class="min-w-0">
+                  <div>{{ rule.label if rule.label is not none else rule.action_type }} <span class="text-xs text-zinc-500">→ {{ rule.action_type }}{% if rule.target_queue %} : {{ rule.target_queue }}{% endif %}{% if rule.priority %} ({{ rule.priority }}){% endif %}</span></div>
+                  <code class="block truncate text-xs text-zinc-500">{{ condition_json(rule.condition) }}</code>
+                </div>
+                {% call config_form("remove-rule", "remove-rule-" ~ rule.id, "ms-auto") %}<input type="hidden" name="id" value="{{ rule.id }}"><button type="submit" class="{{ danger_button }}">Delete</button>{% endcall %}
+              </li>
+              {% endfor %}
+            </ul>
+            {% call config_form("add-rule", "add-rule-" ~ category.id, "flex flex-wrap items-end gap-2", reset=True) %}
+            <input type="hidden" name="category_id" value="{{ category.id }}">
+            {% call field("Rule name", "w-40") %}<input class="{{ input }}" name="label">{% endcall %}
+            {% call field("Order", "w-16") %}<input class="{{ input }}" name="sort_order" type="number" min="0" value="{{ (rules | length) + 1 }}">{% endcall %}
+            {% call field("Match field (optional)", "w-48") %}<input class="{{ input }}" name="condition_field" placeholder="reason">{% endcall %}
+            {% call field("Comparison", "w-40") %}
+            <select class="{{ input }}" name="condition_op">
+              <option value="eq">equals</option><option value="neq">does not equal</option><option value="gt">greater than</option>
+              <option value="lt">less than</option><option value="present">is present</option><option value="absent">is missing</option>
+            </select>
+            {% endcall %}
+            {% call field("Match value", "w-48") %}<input class="{{ input }}" name="condition_value" placeholder="wrong_size">{% endcall %}
+            {% call field("Advanced condition (JSON; used when Match field is empty)", "w-72") %}<textarea class="{{ input }}" name="condition" rows="2" placeholder='{"all":[{"field":"subcategory","op":"eq","value":"damaged"}]}'></textarea>{% endcall %}
+            {% call field("Action", "w-32") %}<select class="{{ input }}" name="action_type">{% for a in action_types %}<option value="{{ a }}" {% if a == "route" %}selected{% endif %}>{{ a }}</option>{% endfor %}</select>{% endcall %}
+            {% call field("Queue", "w-40") %}<input class="{{ input }}" name="target_queue">{% endcall %}
+            {# A dropdown, because priority drives the console's queue order and a typo would sort real work wrongly. #}
+            {% call field("Priority", "w-24") %}<select class="{{ input }}" name="priority">{% for p in priorities %}<option value="{{ p }}" {% if p == "normal" %}selected{% endif %}>{{ p }}</option>{% endfor %}</select>{% endcall %}
+            <button type="submit" class="{{ small_button }}">Add rule</button>
+            {% endcall %}
+          </div>
+
+          {% call config_form("remove-category", "remove-category-" ~ category.id, "border-t pt-3 dark:border-zinc-800") %}
+          <input type="hidden" name="id" value="{{ category.id }}">
+          <button type="submit" class="{{ danger_button }}">Delete category “{{ category.label }}”</button>
+          {% endcall %}
+        </div>
+      </details>
+      {% endfor %}
+    </section>
+
+    <section class="rounded-lg border p-4 border-dashed border-zinc-300 dark:border-zinc-700">
+      <h2 class="mb-3 font-medium">Add a category</h2>
+      {% call config_form("add-category", "add-category", "flex flex-wrap items-end gap-3", reset=True) %}
+      {% call field("Label (any language)", "w-64") %}<input class="{{ input }}" name="label" required>{% endcall %}
+      {% call field("Key (optional — derived from the label)", "w-56") %}<input class="{{ input }}" name="key" placeholder="auto">{% endcall %}
+      {% call field("Order", "w-20") %}<input class="{{ input }}" type="number" name="sort_order" value="{{ ((config.categories | length) + 1) * 10 }}">{% endcall %}
+      <button type="submit" class="{{ primary_button }}">Create category</button>
+      {% endcall %}
+    </section>
+  </div>
+</main>
+<script src="/static/config.js" defer></script>
+{% endblock %}

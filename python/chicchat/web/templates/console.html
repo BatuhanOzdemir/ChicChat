@@ -1,0 +1,94 @@
+{% extends "app_base.html" %}
+{% from "ui.html" import status_badge, priority_badge, queue_name, panel, merchant_switcher with context %}
+{% block title %}Agent console · ChicChat{% endblock %}
+{# Agent case queue (SPEC §9): most urgent and longest waiting first. #}
+{% block content %}
+{% set field = "rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900" %}
+<main class="mx-auto max-w-6xl p-6 text-zinc-900 dark:text-zinc-100">
+  <header class="mb-4">
+    <div class="flex flex-wrap items-baseline justify-between gap-2">
+      <h1 class="text-2xl font-semibold">Agent console</h1>
+      {{ merchant_switcher(merchant, "/console") }}
+    </div>
+    <p class="text-sm text-zinc-500">{{ outstanding }} case(s) outstanding. Work the queue by priority and age, update statuses, and add internal notes.</p>
+  </header>
+  <div class="space-y-4">
+    {% call panel("Queues", "from the routing rules (SPEC §3)") %}
+    {% if not queues %}
+    <p class="text-sm text-zinc-500">Nothing outstanding. Generate a case in the <a class="underline" href="/simulator">simulator</a>.</p>
+    {% else %}
+    <ul class="flex flex-wrap gap-2">
+      {% for q in queues %}
+      {% set key = q.queue if q.queue is not none else "unrouted" %}
+      {% set active = filters.queue is not none and key == filters.queue %}
+      <li>
+        <a href="{{ queue_href(q.queue) }}" class="flex items-baseline gap-2 rounded border px-3 py-2 text-sm hover:border-zinc-400 {{ 'border-zinc-900 dark:border-zinc-100' if active else 'border-zinc-200 dark:border-zinc-800' }}">
+          <span class="font-mono text-xs">{{ queue_name(q.queue) }}</span>
+          <strong>{{ q.n }}</strong>
+          {% if q.high > 0 %}<span class="text-xs text-red-700 dark:text-red-300">{{ q.high }} high</span>{% endif %}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% endcall %}
+
+    {% call panel("Filters") %}
+    <form class="flex flex-wrap items-end gap-3" method="get">
+      <label class="flex flex-col gap-1 text-xs text-zinc-500">Queue
+        <select class="{{ field }}" name="queue">
+          <option value="">all queues</option>
+          {% for q in queues %}{% set key = q.queue if q.queue is not none else "unrouted" %}
+          <option value="{{ key }}" {% if filters.queue == key %}selected{% endif %}>{{ queue_name(q.queue) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="flex flex-col gap-1 text-xs text-zinc-500">Category
+        <select class="{{ field }}" name="category">
+          <option value="">any</option>
+          {% for c in category_options %}<option value="{{ c.key }}" {% if filters.category_key == c.key %}selected{% endif %}>{{ c.label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="flex flex-col gap-1 text-xs text-zinc-500">Status
+        <select class="{{ field }}" name="status">
+          <option value="">outstanding</option>
+          {% for s in statuses %}<option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900">Apply</button>
+      <a class="pb-1.5 text-xs underline" href="/console">Clear</a>
+    </form>
+    {% endcall %}
+
+    {% call panel("Work queue", "highest priority, longest waiting first") %}
+    {% if not rows %}
+    <p class="text-sm text-zinc-500">Nothing matches.</p>
+    {% else %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-xs uppercase text-zinc-500">
+          <th class="py-1 pe-3">Waiting</th><th class="py-1 pe-3">Priority</th><th class="py-1 pe-3">Queue</th><th class="py-1 pe-3">Status</th>
+          <th class="py-1 pe-3">Category</th><th class="py-1 pe-3">Order</th><th class="py-1 pe-3">Customer</th><th class="py-1 pe-3">Notes</th><th class="py-1"></th>
+        </tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr class="border-t border-zinc-100 dark:border-zinc-800">
+            <td class="py-1.5 pe-3 whitespace-nowrap text-xs">{{ age(row.created_at) }}</td>
+            <td class="py-1.5 pe-3">{{ priority_badge(row.priority) }}</td>
+            <td class="py-1.5 pe-3 font-mono text-xs">{{ queue_name(row.queue) }}</td>
+            <td class="py-1.5 pe-3">{{ status_badge(row.status) }}</td>
+            <td class="py-1.5 pe-3">{{ row.category_label }}{% if row.subcategory_key %}<span class="text-xs text-zinc-500"> / {{ row.subcategory_key }}</span>{% endif %}</td>
+            <td class="py-1.5 pe-3 font-mono text-xs">{{ row.order_number or "—" }}</td>
+            <td class="py-1.5 pe-3 font-mono text-xs">{{ row.customer_wa_id | masked }}</td>
+            <td class="py-1.5 pe-3 text-xs text-zinc-500">{{ row.note_count if row.note_count > 0 else "—" }}</td>
+            <td class="py-1.5"><a class="text-xs underline" href="/console/{{ row.id }}">work on it</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% endcall %}
+  </div>
+</main>
+{% endblock %}
