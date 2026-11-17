@@ -165,6 +165,73 @@ subsequent runs; monitor queue backlog as traffic grows.
 
 ## 5. Verify in staging
 
+### 5a. Make the staging database (a copy of production)
+
+Rehearsed on 2026-11-17 against a local copy shaped like production (seven
+migrations, 15 tables). It needs Docker; the `postgres:17` image supplies
+`pg_dump`, `pg_restore` and `psql` at least as new as Supabase's server.
+
+1. Create a second Supabase project (e.g. `ChicChat_Staging`) in the **same EU
+   region**. It holds real customer data: delete it after the cutover week.
+2. For both projects, copy the **Session pooler** connection string (Connect →
+   Session pooler, port 5432). It works over IPv4; the transaction pooler
+   (port 6543) does not support `pg_dump`. Percent-encode special characters
+   in the password. In the repository root:
+
+   ```bash
+   export PROD_URL='postgresql://postgres.<prod-ref>:<password>@<pooler-host>:5432/postgres'
+   export STAGING_URL='postgresql://postgres.<staging-ref>:<password>@<pooler-host>:5432/postgres'
+   ```
+
+3. Back up production (application data and migration history only; this
+   file is also the pre-cutover backup, so keep it somewhere private):
+
+   ```bash
+   docker run --rm -v "$PWD:/work" -w /work postgres:17 \
+     pg_dump "$PROD_URL" --format=custom --no-owner --no-privileges \
+     --schema=public --schema=supabase_migrations -f chicchat-prod-backup.dump
+   ```
+
+4. Restore it into staging. One error, `schema "public" already exists`, is
+   expected; anything else, stop and investigate:
+
+   ```bash
+   docker run --rm -v "$PWD:/work" -w /work postgres:17 \
+     pg_restore --no-owner --no-privileges -d "$STAGING_URL" chicchat-prod-backup.dump
+   ```
+
+5. Apply the five September migrations in one transaction and record them,
+   so the Supabase CLI's history stays correct (all or nothing):
+
+   ```bash
+   docker run --rm -v "$PWD:/work" -w /work postgres:17 \
+     psql "$STAGING_URL" -v ON_ERROR_STOP=1 --single-transaction \
+     -f supabase/migrations/20260909120000_case_history.sql \
+     -f supabase/migrations/20260909130000_reliable_delivery.sql \
+     -f supabase/migrations/20260909140000_console_identity.sql \
+     -f supabase/migrations/20260909150000_private_media.sql \
+     -f supabase/migrations/20260909160000_private_tables.sql \
+     -c "insert into supabase_migrations.schema_migrations (version, name) values ('20260909120000','case_history'),('20260909130000','reliable_delivery'),('20260909140000','console_identity'),('20260909150000','private_media'),('20260909160000','private_tables')"
+   ```
+
+6. Check: 22 tables, all with Row-Level Security, and 12 migrations:
+
+   ```bash
+   docker run --rm postgres:17 psql "$STAGING_URL" \
+     -c "select count(*), bool_and(rowsecurity) from pg_tables where schemaname='public'" \
+     -c "select count(*) from supabase_migrations.schema_migrations"
+   ```
+
+7. Provision a named account on staging (§2), with `DATABASE_URL` set to the
+   staging **transaction pooler** URL (port 6543) the app will use.
+
+The same migration command (step 5, with `$PROD_URL`) is run against
+production at cutover, after a fresh backup. The migrations only add tables
+and columns, and triggers fill the new case snapshot columns, so the running
+TypeScript deployment keeps working after they are applied.
+
+### 5b. Checks on the staging deployment
+
 1. Check `/api/health` and inspect startup warnings.
 2. Confirm logged-out `/cases`, `/console`, `/config`, and `/simulator` require login.
 3. Sign in with an account assigned to one merchant; confirm no other merchant's
