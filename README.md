@@ -4,10 +4,11 @@ WhatsApp support intake for fashion retailers: merchant-defined categories and
 fields, durable conversation processing, rule-based routing, case history, and
 an agent console. Python (FastAPI), PostgreSQL.
 
-The application lives in [`python/`](python). The original TypeScript (Next.js)
-version under `src/` is kept as the reference until the Python version has run
-in production (see [the port plan](docs/PORT.md), Port Step 7); it is no longer
-where changes are made.
+The application lives in [`python/`](python) and deploys to Vercel as its own
+project (see [Deployment](docs/DEPLOYMENT.md)). The original TypeScript
+(Next.js) version under `src/` still serves production until the cutover in
+[the port plan](docs/PORT.md) (Port Step 7) and is deleted a week after it; it
+is no longer where changes are made.
 
 ## Local development
 

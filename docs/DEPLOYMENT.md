@@ -4,8 +4,8 @@ ChicChat runs as a Python web server (FastAPI under uvicorn) with PostgreSQL and
 a recurring HTTP job. This guide describes the Python application in `python/`.
 
 **Until the cutover in Port Step 7** ([PORT.md](PORT.md) §8), production still
-runs the TypeScript version on Vercel. Do not point Meta or the maintenance job
-at a Python deployment before that step is signed off.
+runs the TypeScript version from its own Vercel project. Do not point Meta or
+the maintenance job at a Python deployment before that step is signed off.
 
 ## 1. Database and migrations
 
@@ -75,8 +75,39 @@ are a future change.
 | `FORWARDED_ALLOW_IPS` | Address of the TLS-terminating proxy, so client details are trusted from it only |
 | `DATABASE_POOL_SIZE` | Connections per worker (default 10); keep within the database's limit |
 
-Install and start (the host needs Python 3.13 and uv; `tzdata` is a dependency,
-so slim images without a time-zone database work):
+### On Vercel (production)
+
+The Python app runs as its own Vercel project, separate from the TypeScript
+one:
+
+1. In Vercel, **Add New → Project**, import this repository, and set **Root
+   Directory** to `python`. Vercel detects FastAPI and loads `app` from
+   `python/index.py`; it installs from `pyproject.toml`/`uv.lock` (without the
+   dev tools) on Python 3.13 (`.python-version`). Leave the build and install
+   commands empty.
+2. Under **Settings → Functions**, choose the region closest to the Supabase
+   database (Frankfurt, `fra1`, for an EU project), the same as the TypeScript
+   project.
+3. Under **Settings → Environment Variables**, add the settings in the table
+   above. Leave `HOST`, `PORT`, `WEB_CONCURRENCY` and `FORWARDED_ALLOW_IPS`
+   unset: Vercel runs the server itself. Use Supabase's transaction-mode
+   pooler URL (port 6543) for `DATABASE_URL` and keep `DATABASE_POOL_SIZE`
+   small (for example 3), because every running function instance keeps its
+   own connections.
+4. Deploy, then run the checks in §5 against the project's URL.
+
+`.vercelignore` keeps tests and caches out of the function bundle. The webhook
+acknowledges Meta first and processes the message right after the response:
+Vercel's Python runtime keeps the invocation open until that work has finished
+(`tests/web/test_vercel.py` pins this), within the function's maximum duration
+(300 seconds by default). Anything interrupted is recovered by maintenance.
+Each instance checks a pooled connection before using it, because a paused
+instance can find that the pooler has closed its idle connections.
+
+### On any other host
+
+The host needs Python 3.13 and uv; `tzdata` is a dependency, so slim images
+without a time-zone database work:
 
 ```bash
 cd python
@@ -86,8 +117,9 @@ HOST=0.0.0.0 uv run python -m chicchat.web
 
 The app refuses to start without `DATABASE_URL` and logs any configuration
 warnings at startup. Use a host that keeps the process running (a container
-service rather than short-lived functions): the webhook acknowledges Meta first
-and processes the message right after the response, inside the same process.
+service rather than short-lived functions without an after-response hook): the
+webhook acknowledges Meta first and processes the message right after the
+response, inside the same process.
 
 The access log is off on purpose: it would print full URLs, including the
 webhook's query parameters. The app writes one structured JSON line per event
@@ -148,8 +180,8 @@ unless the database is local and named with an `_test` suffix.
 
 Keep backups until staging and production checks pass. The Python and
 TypeScript versions share the same database and schema, so rolling back is
-pointing the Meta webhook URL and `MAINTENANCE_URL` back to the previous
-deployment; no data moves. Run only one version's workers at a time. Do not
+pointing the Meta webhook URL and `MAINTENANCE_URL` (or the custom domain) back
+to the TypeScript Vercel project; no data moves. Run only one version's workers at a time. Do not
 remove inbox/outbox/media tables to roll back: that would lose queued work and
 evidence. Prefer fixing forward, or temporarily stop incoming traffic and
 workers while choosing a version.

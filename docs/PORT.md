@@ -33,7 +33,7 @@ Steps 0–6 without per-step sign-off; Port Step 7 needs sign-off.
 | D6 | Database schema | **Unchanged.** Same PostgreSQL, same 12 files in `supabase/migrations`, same Supabase CLI for local DB | The data is language-independent; hosted data needs no migration. |
 | D7 | Boundary validation | Port today's hand-written parsers as-is (functions returning ok/error results) rather than switching to Pydantic models | Exact parity of accepted input and error messages is far easier to prove. Pydantic can come later as a separate change. |
 | D8 | Tooling | **uv** (environments + lockfile), **pytest**, **ruff** (lint + format), **mypy --strict** (type check), **import-linter** (architecture rule) | Direct equivalents of today's npm / Vitest / ESLint + Prettier / `tsc --noEmit`. |
-| D9 | Hosting | Direction ✓ confirmed; provider chosen in Port Step 7. Leading option: a **long-running container host in an EU region near the Supabase database** (e.g. Render, Railway, Fly.io). Re-check Vercel's current Python support at that step before ruling it out. | Today's webhook acknowledges Meta and *then* processes the message (`after()` on Vercel). That post-response work must reliably run, or customers wait for the 5-minute maintenance job. A long-running server makes this simple. |
+| D9 | Hosting | ✓ **Vercel**, as a second project from this repository with Root Directory `python` (owner, 2026-11-17). The current TypeScript project keeps serving production until cutover. | The webhook acknowledges Meta and *then* processes the message. Checked in Vercel's Python runtime (`vercel-runtime` 0.25): it runs the app under uvicorn with lifespan, and ends an invocation only when the ASGI call returns, so FastAPI's after-response tasks finish inside it (pinned by `tests/web/test_vercel.py`). Same account, env vars and region as today; no new provider. |
 | D10 | Repository layout | Python lives beside TypeScript in the same repo (`python/`) until cutover; TypeScript is deleted only in the final step | Both can be run and compared at every step. |
 
 ---
@@ -439,19 +439,30 @@ quiet week of Python in production.
 
 ## 8. Cutover plan (Port Step 7)
 
+Hosting is Vercel (D9): a **second Vercel project** built from this repository
+with Root Directory `python`. The existing project keeps building the
+TypeScript app from `main` and serving customers until step 5 below.
+
 1. Confirm hosted schema and app version (P8). Back up the database.
-2. Deploy Python to staging against a **copy** of production data; run
-   DEPLOYMENT §5; verify an old password and an in-flight session (P3, P5).
+2. Staging: copy production data into a separate database. Create the Python
+   Vercel project (DEPLOYMENT §3) with the staging `DATABASE_URL` and **without
+   `WHATSAPP_ACCESS_TOKEN`**, because the copy may hold replies still queued
+   for real customers. Run DEPLOYMENT §5 on its URL; verify an old password
+   and an in-flight session (P3, P5).
 3. Choose a quiet hour. Pause the GitHub maintenance workflow.
-4. Deploy Python to production with the same environment variables (+
-   `CHICCHAT_ENV=production`, P1).
-5. Point Meta's webhook URL and `MAINTENANCE_URL` at the Python host. Re-enable
+4. Give the Python project the production environment variables (the same
+   values as the TypeScript project; leave `CHICCHAT_ENV` unset, P1) and
+   redeploy.
+5. Point Meta's webhook URL and `MAINTENANCE_URL` at the Python project (or
+   move the custom domain to it, which changes neither). Re-enable
    maintenance. Meta retries failed deliveries, and messages already in the
    inbox are picked up by maintenance, so nothing is lost in the switch.
 6. Watch logs and maintenance summaries for an hour; send real test messages.
-7. **Rollback:** point the webhook and maintenance URL back to the TypeScript
-   deployment. Both share the same database and schema, so no data moves.
-8. After one quiet week: delete TypeScript, update docs, dev log entry.
+7. **Rollback:** point the webhook and maintenance URL (or the domain) back to
+   the TypeScript project. Both share the same database and schema, so no data
+   moves.
+8. After one quiet week: delete TypeScript, the TypeScript Vercel project,
+   update docs, dev log entry.
 
 ---
 
@@ -494,6 +505,11 @@ Add items here as they are found; each becomes its own change after the port.
   scripted answer, so the playback rule stays in Python.
 - **Classifier hand-off:** a `null` value in `pendingInitial` is skipped instead
   of crashing (nothing writes one yet; v0.3 will).
+- **Simulator `sessionMeta`:** TypeScript leaked the whole session row into it
+  (an extra `state` key duplicating `session`); its declared type and the UI
+  use only `created_at`/`updated_at`, which is all Python sends.
+- **`integration_down` notice:** no longer promises "Step 9" (dropped); it says
+  integrations are out of scope.
 
 ---
 
@@ -510,3 +526,5 @@ Updated at the end of every port step, so work can resume from here.
 | Port Step 4 | ✓ | FastAPI app (`chicchat/web`): 5 API routes + simulator preset-step, login gate middleware, sign-in/out, boot check, background inbox processing, CSRF (double-submit token + Origin check, enforced on every state-changing route by a test). 35 HTTP tests (every row of §2, P1 production default, P2 raw-byte signatures, P4) + 2 DB-backed sign-in tests. |
 | Port Step 5 | ✓ | All operator pages as Jinja2 templates (same Tailwind classes; CSS built with Tailwind 4.3.1 into `static/app.css`): login, home, cases + detail, console + detail with status/note actions, configuration editor, simulator. Two commented scripts: `config.js` (in-place saves that keep other sections' unsaved drafts) and `simulator.js` (chat UI; presets ask the server for each step). Browser walkthrough `tests/browser/` (`pytest -m browser`): 6/6, stable across reruns — presets in three categories, private photo evidence, delivery failure + retry, nudge/abandon with choices staying tappable, custom choice field end to end with drafts preserved, filters and console status change. DB-backed page tests prove another merchant's case and photo are 404s. |
 | Port Step 6 | ✓ | `python -m chicchat.web` launcher (access log off), local `scripts.migrate`; CI runs ruff, mypy, import-linter, unit, DB (157) and browser (6) tests on PostgreSQL 17; README, DEPLOYMENT, Handbook §§1–5 and the CLAUDE.md Definition of Done describe the Python app. Gate verified on a fresh database: migrate (idempotent), seed twice (identical rows), launch, intake completes through the simulator API, no access-log lines. TypeScript job kept until Step 7 removes `src/`. |
+| Port Step 7 (part 1) | ✓ | **Side-by-side check** (`scripts/golden/side_by_side.py`): both apps on identically seeded local databases, 352 identical requests through the simulator API, the real signed webhook and the health/maintenance routes — every category × subcategory of both merchants, typed answers and recovery paths, duplicate delivery, a Flow reply, photos, nudge/abandon via time travel + maintenance, reset, error injection and delivery retry, invalid requests. Responses and all 10 conversation/case/queue tables (≈1,400 rows) are identical apart from three explained differences: the two above and the wording of a failed Meta call's `last_error` (client library message). **Vercel support:** `index.py` entrypoint, `.python-version`, `.vercelignore`, pool connection checks for frozen serverless instances. Merged to `main` with TypeScript kept; production unchanged. |
+| Port Step 7 (part 2) | — | Owner: create the Python Vercel project and staging database copy, run DEPLOYMENT §5, cut over (§8). After one quiet week: delete TypeScript. |

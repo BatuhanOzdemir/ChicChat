@@ -56,8 +56,13 @@ Awaiting sign-off for Step N+1.
   and **authorized running Port Steps 0–6 without per-step sign-off**; Port
   Step 7 (staging, cutover, removal of TypeScript) needs sign-off again.
   Progress is tracked in `docs/PORT.md` §10. Port Steps 0–6 are complete
-  (Python app in `python/`); Port Step 7 (staging, cutover, removing the
-  TypeScript) is next and needs sign-off before it starts.
+  (Python app in `python/`). Port Step 7, part 1 is complete (November 2026):
+  the side-by-side check against the TypeScript app found no unexplained
+  difference, hosting is **Vercel** (a second project with Root Directory
+  `python`), and the Python code is on `main`. All new work happens in
+  `python/`. Part 2 is the owner's: create the Python Vercel project, staging,
+  cutover (`docs/PORT.md` §8); the TypeScript code is deleted one quiet week
+  after cutover.
 
 ---
 
