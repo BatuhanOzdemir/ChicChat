@@ -5,6 +5,10 @@ DATABASE_URL; falls back to the local Supabase URL.
 
 `prepare_threshold=None` keeps psycopg from switching to server-side prepared
 statements, which break under Supabase's transaction-mode pooler (P13).
+
+`check` tests each connection before handing it out. On Vercel an instance can
+sit frozen between requests while the pooler drops its idle connections; the
+check replaces a dead connection instead of failing the request.
 """
 
 from __future__ import annotations
@@ -55,6 +59,7 @@ def get_database() -> PoolDatabase:
                 os.environ.get("DATABASE_URL") or LOCAL_DEFAULT,
                 kwargs={"autocommit": True, "prepare_threshold": None},
                 configure=_configure,
+                check=ConnectionPool.check_connection,
                 min_size=1,
                 max_size=int(os.environ.get("DATABASE_POOL_SIZE", "10")),
                 open=True,

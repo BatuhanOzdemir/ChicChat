@@ -1,0 +1,8 @@
+# Only the application is deployed; tests, caches and local tooling stay out
+# of the Vercel function bundle.
+tests/
+.venv/
+**/__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
