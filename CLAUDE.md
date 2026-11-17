@@ -58,11 +58,13 @@ Awaiting sign-off for Step N+1.
   Progress is tracked in `docs/PORT.md` §10. Port Steps 0–6 are complete
   (Python app in `python/`). Port Step 7, part 1 is complete (November 2026):
   the side-by-side check against the TypeScript app found no unexplained
-  difference, hosting is **Vercel** (a second project with Root Directory
-  `python`), and the Python code is on `main`. All new work happens in
-  `python/`. Part 2 is the owner's: create the Python Vercel project, staging,
-  cutover (`docs/PORT.md` §8); the TypeScript code is deleted one quiet week
-  after cutover.
+  difference, and hosting is **Vercel** (a second project with Root Directory
+  `python`). On the owner's request the TypeScript code was **removed from
+  `main` on 2026-11-17**, before cutover (commit `b655d64` is the last with it).
+  The project is Python only. What remains of the port is the owner's
+  part 2: create the Python Vercel project, staging, cutover
+  (`docs/PORT.md` §8); the retired TypeScript Vercel project stays as the
+  fallback for one quiet week after cutover.
 
 ---
 

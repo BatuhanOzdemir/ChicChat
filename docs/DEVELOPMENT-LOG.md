@@ -3,7 +3,7 @@
 Sections 1–14 are the historical record through August 2026. The September
 reliability, privacy, authentication and simulator repairs are in §15, and the
 follow-up user-findings fixes in §16. The full v0.1 retrofit audit is
-Appendix B (§18). Statements in §§1–14 about shared passcodes, missing
+Appendix B (§18). The November 2026 port from TypeScript to Python is §19. Statements in §§1–14 about shared passcodes, missing
 retention and pointer-only media describe the August implementation, not the
 repaired code.
 
@@ -1047,3 +1047,45 @@ in Step 1's simulator.
 ---
 
 *End of log. v0.2 closed 2026-08-28 at commit `fd2d23e`; September repairs at `927f61a`, user-findings follow-up at `a013c39`.*
+
+---
+
+## 19. November 2026 — the Python port
+
+**Why.** The owner reads Python and Java, not TypeScript, and needs to
+understand the code as the project grows. Decided 2026-11-01: Python with
+FastAPI, Jinja2 templates, psycopg with the SQL copied verbatim, no ORM.
+`docs/PORT.md` is the full plan, pitfall list and progress log.
+
+**How it was kept honest.**
+- ~25,000 domain calls were recorded from the TypeScript code and replayed
+  through Python: identical output (`python/tests/golden/`, now fixed
+  reference data).
+- All 175 TypeScript domain tests and all 153 database tests were ported by
+  name and pass; the Python suite adds HTTP tests (CSRF, production default,
+  raw-byte webhook signatures, Vercel behaviour) and a six-scenario browser
+  walkthrough. CI runs everything on PostgreSQL 17.
+- The seed writes identical rows; password hashes and sessions written by
+  the TypeScript version are accepted by Python.
+- Final side-by-side check (2026-11-17): both apps on identically seeded
+  databases, 352 identical requests covering every category path of both
+  merchants, recovery paths, duplicates, photos, inactivity, error injection
+  and the signed webhook. Responses and ten tables (~1,400 rows) matched,
+  apart from three explained differences (PORT.md §9–§10).
+
+**What changed on purpose.** Listed in PORT.md §9 ("Deliberate, documented
+differences"): ISO-only date parsing, JavaScript regex translation limits,
+preset playback moved to the server, plain forms instead of HTMX, the
+simulator's `sessionMeta` no longer duplicating the session, and an updated
+`integration_down` notice.
+
+**Hosting.** Vercel, as a new project with Root Directory `python`: its
+Python runtime keeps an invocation open until FastAPI's after-response work
+finishes, which the webhook relies on (`tests/web/test_vercel.py`).
+
+**TypeScript removed early.** At the owner's request the TypeScript code left
+`main` on 2026-11-17, after the side-by-side check but before the cutover;
+commit `b655d64` is the last that contains it. Production keeps serving the
+TypeScript project's last deployment until the owner runs the cutover
+(PORT.md §8), and stays the fallback for a week after it.
+

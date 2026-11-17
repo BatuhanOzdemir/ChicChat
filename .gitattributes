@@ -1,0 +1,5 @@
+# Keep GitHub's language statistics about the code people write.
+# Recorded reference outputs from the TypeScript version (test fixtures):
+python/tests/golden/*.json linguist-generated=true
+# Built from python/chicchat/web/styles.css by the Tailwind CLI:
+python/chicchat/web/static/app.css linguist-generated=true

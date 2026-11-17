@@ -197,7 +197,7 @@ follow. Marketplaces deferred.
 ## 15. Scalability assumptions
 
 Single-digit merchants, low thousands of conversations/month, one region, one
-Postgres + one Next.js deployment. Revisit when false.
+Postgres + one Python (FastAPI) deployment on Vercel. Revisit when false.
 
 ## 16. Observability
 

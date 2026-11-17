@@ -3,9 +3,12 @@
 ChicChat runs as a Python web server (FastAPI under uvicorn) with PostgreSQL and
 a recurring HTTP job. This guide describes the Python application in `python/`.
 
-**Until the cutover in Port Step 7** ([PORT.md](PORT.md) §8), production still
-runs the TypeScript version from its own Vercel project. Do not point Meta or
-the maintenance job at a Python deployment before that step is signed off.
+**Until the cutover** ([PORT.md](PORT.md) §8), production is the last
+deployment of the retired TypeScript version in its own Vercel project. Its
+code is no longer on `main` (removed 2026-11-17), so that project can no
+longer build: leave it untouched as the rollback target until the Python
+project has run in production for a week. Do not point Meta or the
+maintenance job at the Python project before the staging checks in §5 pass.
 
 ## 1. Database and migrations
 
@@ -77,8 +80,8 @@ are a future change.
 
 ### On Vercel (production)
 
-The Python app runs as its own Vercel project, separate from the TypeScript
-one:
+The Python app runs as its own Vercel project, separate from the retired
+TypeScript one:
 
 1. In Vercel, **Add New → Project**, import this repository, and set **Root
    Directory** to `python`. Vercel detects FastAPI and loads `app` from
@@ -178,10 +181,16 @@ unless the database is local and named with an `_test` suffix.
 
 ## Rollback
 
-Keep backups until staging and production checks pass. The Python and
-TypeScript versions share the same database and schema, so rolling back is
-pointing the Meta webhook URL and `MAINTENANCE_URL` (or the custom domain) back
-to the TypeScript Vercel project; no data moves. Run only one version's workers at a time. Do not
+Keep backups until staging and production checks pass. Within the Python
+project, Vercel's **Instant Rollback** (Deployments → an earlier deployment →
+Promote/Rollback) returns to a previous build in seconds.
+
+Until the Python project has run in production for a week, the retired
+TypeScript project's last deployment stays live as a fallback. Both versions
+share the same database and schema, so falling back is pointing the Meta
+webhook URL and `MAINTENANCE_URL` (or the custom domain) back to that project;
+no data moves. Its code is in Git history (commit `b655d64`) if it ever
+has to be rebuilt. Run only one version's workers at a time. Do not
 remove inbox/outbox/media tables to roll back: that would lose queued work and
 evidence. Prefer fixing forward, or temporarily stop incoming traffic and
 workers while choosing a version.

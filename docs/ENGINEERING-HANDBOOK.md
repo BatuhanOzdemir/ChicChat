@@ -76,8 +76,9 @@ web (routes, templates)  →  server (orchestration)  →  db (persistence)  →
 - Tests are behaviour scripts: messy input in, correct outcome out. One
   scenario per test with a descriptive name.
 - Golden files (`python/tests/golden`) pin domain behaviour recorded from the
-  TypeScript implementation; a change to them is a behaviour change and needs
-  saying so in the step report.
+  former TypeScript implementation (the recorder was removed with it; the
+  recordings are now fixed reference data). A change to them is a behaviour
+  change and needs saying so in the step report.
 - Given/When/Then only for genuinely tricky behaviour, not ceremony.
 
 ## 5. Security & privacy

@@ -1,8 +1,9 @@
 """Golden-file comparison (docs/PORT.md §5).
 
-`scripts/golden/*.golden.ts` runs the TypeScript implementation over recorded
-inputs and writes `tests/golden/<module>.json`. These helpers replay every
-recorded case through the Python implementation and require identical output.
+`tests/golden/<module>.json` holds ~25,000 calls recorded from the former
+TypeScript implementation during the port (the recorder was removed with the
+TypeScript; it is in commit b655d64). These helpers replay every recorded case
+through the Python implementation and require identical output.
 """
 
 from __future__ import annotations
